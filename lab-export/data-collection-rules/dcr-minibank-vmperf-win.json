@@ -1,0 +1,51 @@
+{
+  "dataFlows": [
+    {
+      "destinations": [
+        "law"
+      ],
+      "streams": [
+        "Microsoft-Perf"
+      ],
+      "transformKql": "source | where ObjectName != 'Process' or (CounterValue >= 20 and InstanceName != '_Total' and InstanceName != 'Idle')"
+    }
+  ],
+  "dataSources": {
+    "performanceCounters": [
+      {
+        "counterSpecifiers": [
+          "\\Processor(_Total)\\% Processor Time",
+          "\\Memory\\Available MBytes",
+          "\\Memory\\% Committed Bytes In Use",
+          "\\System\\Processor Queue Length",
+          "\\Process(*)\\% Processor Time"
+        ],
+        "name": "perfWin",
+        "samplingFrequencyInSeconds": 30,
+        "streams": [
+          "Microsoft-Perf"
+        ]
+      }
+    ]
+  },
+  "description": "MiniBank cross-layer lab: Windows performance counters of APP-WIN and APP-SQL every 30 s (busy processes only: >= 20 % of one core)",
+  "destinations": {
+    "logAnalytics": [
+      {
+        "name": "law",
+        "workspaceId": "<WORKSPACE_ID>",
+        "workspaceResourceId": "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+      }
+    ]
+  },
+  "immutableId": "dcr-<IMMUTABLE_ID>",
+  "kind": "Windows",
+  "location": "indonesiacentral",
+  "name": "dcr-minibank-vmperf-win",
+  "resourceGroup": "rg-appmon-openshift-demo",
+  "tags": {
+    "Project": "MiniBank-demo",
+    "Purpose": "cross-layer-root-cause"
+  },
+  "type": "Microsoft.Insights/dataCollectionRules"
+}

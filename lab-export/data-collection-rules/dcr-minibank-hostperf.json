@@ -1,0 +1,50 @@
+{
+  "dataFlows": [
+    {
+      "destinations": [
+        "law"
+      ],
+      "streams": [
+        "Microsoft-Perf"
+      ]
+    }
+  ],
+  "dataSources": {
+    "performanceCounters": [
+      {
+        "counterSpecifiers": [
+          "\\Hyper-V Hypervisor Logical Processor(_Total)\\% Total Run Time",
+          "\\Hyper-V Hypervisor Root Virtual Processor(_Total)\\% Total Run Time",
+          "\\Processor(_Total)\\% Processor Time",
+          "\\Hyper-V Hypervisor Virtual Processor(*)\\% Total Run Time",
+          "\\Hyper-V Hypervisor Virtual Processor(*)\\CPU Wait Time Per Dispatch"
+        ],
+        "name": "perfHost",
+        "samplingFrequencyInSeconds": 30,
+        "streams": [
+          "Microsoft-Perf"
+        ]
+      }
+    ]
+  },
+  "description": "MiniBank cross-layer lab: Hyper-V host CPU of HV-HOST-02 every 30 s (true host load, Windows view, root partition, per-VM run time and CPU wait)",
+  "destinations": {
+    "logAnalytics": [
+      {
+        "name": "law",
+        "workspaceId": "<WORKSPACE_ID>",
+        "workspaceResourceId": "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+      }
+    ]
+  },
+  "immutableId": "dcr-<IMMUTABLE_ID>",
+  "kind": "Windows",
+  "location": "indonesiacentral",
+  "name": "dcr-minibank-hostperf",
+  "resourceGroup": "rg-appmon-openshift-demo",
+  "tags": {
+    "Project": "MiniBank-demo",
+    "Purpose": "host-cpu-contention"
+  },
+  "type": "Microsoft.Insights/dataCollectionRules"
+}

@@ -1,0 +1,70 @@
+# minibank-rates-copy: the SAME image as minibank-rates, NOT onboarded. Used for the live zero-code onboarding in Scene 2
+# (scripts\onboard-live.ps1 adds one annotation; scripts\onboard-reset.ps1 removes it again).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minibank-rates-copy
+  namespace: minibank
+  labels: {app: minibank-rates-copy, demo: minibank, purpose: live-onboarding}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: minibank-rates-copy}
+  template:
+    metadata:
+      labels: {app: minibank-rates-copy}
+    spec:
+      imagePullSecrets:
+        - name: acr-pull
+      tolerations:
+        - {key: node.kubernetes.io/not-ready, operator: Exists, effect: NoExecute, tolerationSeconds: 60}
+        - {key: node.kubernetes.io/unreachable, operator: Exists, effect: NoExecute, tolerationSeconds: 60}
+      containers:
+        - name: minibank-rates
+          image: ACR_NAME.azurecr.io/minibank-rates:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - {name: http, containerPort: 8080, protocol: TCP}
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:MaxRAMPercentage=50"
+          readinessProbe:
+            httpGet: {path: /actuator/health/readiness, port: http}
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: {path: /actuator/health/liveness, port: http}
+            initialDelaySeconds: 90
+            periodSeconds: 15
+            failureThreshold: 3
+          resources:
+            requests: {cpu: 100m, memory: 384Mi}
+            limits: {cpu: "1", memory: 768Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities: {drop: ["ALL"]}
+            seccompProfile: {type: RuntimeDefault}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minibank-rates-copy
+  namespace: minibank
+  labels: {app: minibank-rates-copy, demo: minibank}
+spec:
+  selector: {app: minibank-rates-copy}
+  ports:
+    - {name: http, port: 8080, targetPort: 8080, protocol: TCP}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: minibank-rates-copy
+  namespace: minibank
+  labels: {app: minibank-rates-copy, demo: minibank}
+spec:
+  host: minibank-rates-copy.apps.ocp-minibank.minibank-demo.lab
+  to: {kind: Service, name: minibank-rates-copy}
+  port: {targetPort: http}

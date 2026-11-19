@@ -1,0 +1,54 @@
+{
+  "actions": {
+    "actionGroups": [
+      "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/microsoft.insights/actionGroups/ag-appmon-email"
+    ],
+    "customProperties": null
+  },
+  "autoMitigate": true,
+  "checkWorkspaceAlertsStorageConfigured": false,
+  "createdWithApiVersion": "2023-12-01",
+  "criteria": {
+    "allOf": [
+      {
+        "dimensions": [],
+        "failingPeriods": {
+          "minFailingPeriodsToAlert": 1,
+          "numberOfEvaluationPeriods": 1
+        },
+        "metricMeasureColumn": null,
+        "metricName": null,
+        "operator": "GreaterThan",
+        "query": "AppRequests | where AppRoleName == \"minibank-api\" and Name startswith \"POST /api/\" and ResultCode == \"409\" | summarize Declines = count() | where Declines > 10",
+        "resourceIdColumn": null,
+        "threshold": 0.0,
+        "timeAggregation": "Count"
+      }
+    ]
+  },
+  "description": "Business declines (HTTP 409 Insufficient balance) above 10 in 15 minutes on minibank-api: an unusual business pattern, not a technical failure. Normal background is about 4 per hour. Demo lab, no notifications.",
+  "displayName": null,
+  "enabled": true,
+  "evaluationFrequency": "0:05:00",
+  "isLegacyLogAnalyticsRule": null,
+  "isWorkspaceAlertsStorageConfigured": null,
+  "kind": null,
+  "location": "indonesiacentral",
+  "muteActionsDuration": null,
+  "name": "alr-minibank-decline-spike",
+  "overrideQueryTimeRange": null,
+  "resourceGroup": "rg-appmon-openshift-demo",
+  "scopes": [
+    "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+  ],
+  "severity": 3,
+  "skipQueryValidation": false,
+  "tags": {
+    "demo": "minibank",
+    "owner": "labadmin",
+    "purpose": "appmon-openshift-demo"
+  },
+  "targetResourceTypes": null,
+  "type": "Microsoft.Insights/scheduledQueryRules",
+  "windowSize": "0:15:00"
+}

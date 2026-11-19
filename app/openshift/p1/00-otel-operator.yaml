@@ -1,0 +1,31 @@
+# Red Hat build of OpenTelemetry operator (OperatorHub package opentelemetry-product, channel stable).
+# Updates are approved by hand (installPlanApproval: Manual) - decision 8 of the P1 plan.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openshift-opentelemetry-operator
+  labels:
+    openshift.io/cluster-monitoring: "true"
+    demo: minibank
+---
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: openshift-opentelemetry-operator
+  namespace: openshift-opentelemetry-operator
+spec:
+  upgradeStrategy: Default
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: opentelemetry-product
+  namespace: openshift-opentelemetry-operator
+  labels:
+    demo: minibank
+spec:
+  channel: stable
+  installPlanApproval: Manual
+  name: opentelemetry-product
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace

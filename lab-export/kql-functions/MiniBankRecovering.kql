@@ -1,0 +1,26 @@
+// MiniBankRecovering  (category: MiniBank cross-layer; parameters: at:datetime=datetime(null), hold:timespan=10m)
+// MiniBankRecovering(at, hold) - display-only "Recovering" banner for the cross-layer board (option A, 13 Nov 2026).
+// Reads only the observer history MiniBankVerdict_CL. It never feeds MiniBankRootCause (rules v2.7) or the scoring.
+// Banner = for `hold` (10 min) after the last confirmed answer (two RootCause readings in a row, same layer, < 3 min apart),
+// as soon as the newest reading is no longer part of that confirmed answer. Otherwise Banner = 'none'.
+let T = iff(isnull(at), now(), at);
+let r = MiniBankVerdict_CL
+    | where TimeGenerated > T - hold - 30m and TimeGenerated <= T
+    | project TimeGenerated, Status, Layer, Component
+    | order by TimeGenerated asc
+    | extend PS = prev(Status), PL = prev(Layer), PT = prev(TimeGenerated)
+    | extend Conf = Status == 'RootCause' and PS == 'RootCause' and Layer == PL and TimeGenerated - PT < 3m
+    | extend Ep = row_cumsum(iff(Conf, 0, 1));
+let newest = toscalar(r | summarize max(TimeGenerated));
+let ans = r | where Conf | summarize arg_max(TimeGenerated, Layer, Component, Ep);
+let ep = toscalar(ans | project Ep);
+let answeredAt = toscalar(r | where Conf and Ep == ep | summarize min(TimeGenerated));
+let banner = ans
+    | where TimeGenerated >= T - hold and newest > TimeGenerated
+    | project Banner = strcat('Recovering – last cause: ', Layer, iff(isnotempty(Component), strcat(' (', Component, ')'), ''),
+                              ' · answered ', format_datetime(answeredAt + 7h, 'HH:mm'), ', cleared ', format_datetime(TimeGenerated + 7h, 'HH:mm'),
+                              ' WIB · late readings may flicker until ', format_datetime(TimeGenerated + hold + 7h, 'HH:mm'), ' WIB'),
+              Recovering = 1, LastCause = Layer, Component, AnsweredAt = answeredAt, ClearedAt = TimeGenerated, EndsAt = TimeGenerated + hold;
+union banner, (print Banner = 'none', Recovering = 0, LastCause = '', Component = '', AnsweredAt = datetime(null), ClearedAt = datetime(null), EndsAt = datetime(null))
+| top 1 by Recovering desc
+

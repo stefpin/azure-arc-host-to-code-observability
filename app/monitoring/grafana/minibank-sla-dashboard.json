@@ -1,0 +1,708 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_AZURE_MONITOR",
+      "label": "Azure Monitor",
+      "type": "datasource",
+      "pluginId": "grafana-azure-monitor-datasource",
+      "pluginName": "Azure Monitor",
+      "description": "Azure Monitor data source that can read law-appmon"
+    }
+  ],
+  "__requires": [
+    {
+      "type": "datasource",
+      "id": "grafana-azure-monitor-datasource",
+      "name": "Azure Monitor",
+      "version": "1.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "stat",
+      "name": "Stat",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Time series",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "table",
+      "name": "Table",
+      "version": ""
+    }
+  ],
+  "title": "MiniBank - SLA and Failure Rate",
+  "uid": "minibank-sla",
+  "tags": [
+    "minibank",
+    "demo"
+  ],
+  "description": "MiniBank demo (synthetic data): Application Insights appi-minibank in workspace law-appmon. Version 1.3: technical failures = HTTP 5xx; business declines (HTTP 409 Insufficient balance) are shown separately and are not failures.",
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "sub",
+        "label": "Subscription",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-azure-monitor-datasource",
+          "uid": "${DS_AZURE_MONITOR}"
+        },
+        "query": {
+          "refId": "sub",
+          "queryType": "Azure Subscriptions"
+        },
+        "definition": "",
+        "refresh": 1,
+        "regex": "",
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "sort": 1,
+        "current": {},
+        "options": []
+      },
+      {
+        "name": "workspace",
+        "label": "Workspace (law-appmon)",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-azure-monitor-datasource",
+          "uid": "${DS_AZURE_MONITOR}"
+        },
+        "query": {
+          "refId": "ws",
+          "queryType": "Azure Workspaces",
+          "subscription": "$sub"
+        },
+        "definition": "",
+        "refresh": 1,
+        "regex": "/law-appmon/",
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "sort": 1,
+        "current": {},
+        "options": []
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Availability % (probe)",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "${DS_AZURE_MONITOR}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 5,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "${DS_AZURE_MONITOR}"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "AppAvailabilityResults\n| where $__timeFilter(TimeGenerated)\n| summarize AvailabilityPct = round(100.0 * countif(Success == true) / count(), 2)",
+            "resources": [
+              "$workspace"
+            ],
+            "resultFormat": "table"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 99
+              },
+              {
+                "color": "green",
+                "value": 99.9
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {},
+      "description": "Share of successful runs of the internal availability probe (one transfer per minute from HV-HOST-02)."
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Technical failures % (5xx)",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "${DS_AZURE_MONITOR}"
+      },
+      "gridPos": {
+        "x": 5,
+        "y": 0,
+        "w": 5,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "${DS_AZURE_MONITOR}"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "AppRequests\n| where $__timeFilter(TimeGenerated)\n| where AppRoleName == \"minibank-api\" and Name !has \"health\" and Name has \"/api/\"\n| summarize FailureRatePct = round(100.0 * sumif(ItemCount, toint(ResultCode) >= 500) / sum(ItemCount), 2)",
+            "resources": [
+              "$workspace"
+            ],
+            "resultFormat": "table"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {},
+      "description": "Server errors (HTTP 5xx) of all business requests on minibank-api. Business declines such as Insufficient balance (HTTP 409) are not failures."
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Business declines",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "${DS_AZURE_MONITOR}"
+      },
+      "gridPos": {
+        "x": 10,
+        "y": 0,
+        "w": 4,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "${DS_AZURE_MONITOR}"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "AppRequests\n| where $__timeFilter(TimeGenerated)\n| where AppRoleName == \"minibank-api\" and Name !has \"health\" and Name has \"/api/\"\n| summarize Declines = sumif(ItemCount, ResultCode == \"409\")",
+            "resources": [
+              "$workspace"
+            ],
+            "resultFormat": "table"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {},
+      "description": "Business declines = Insufficient balance (HTTP 409 INSUFFICIENT_FUNDS) in the selected time range. The background traffic adds about 4 an hour. Not a failure and not in the SLA."
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Success % (SLA 99.9)",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "${DS_AZURE_MONITOR}"
+      },
+      "gridPos": {
+        "x": 14,
+        "y": 0,
+        "w": 5,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "${DS_AZURE_MONITOR}"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "AppRequests\n| where $__timeFilter(TimeGenerated)\n| where AppRoleName == \"minibank-api\" and Name !has \"health\" and Name has \"/api/\"\n| summarize SuccessPct = round(100.0 - 100.0 * sumif(ItemCount, toint(ResultCode) >= 500) / sum(ItemCount), 3)",
+            "resources": [
+              "$workspace"
+            ],
+            "resultFormat": "table"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 99
+              },
+              {
+                "color": "green",
+                "value": 99.9
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {},
+      "description": "SLA: 99.9 % of business requests without a technical failure (HTTP 5xx). Business declines (HTTP 409) do not use the error budget."
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "P95 latency ms (SLA 1000)",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "${DS_AZURE_MONITOR}"
+      },
+      "gridPos": {
+        "x": 19,
+        "y": 0,
+        "w": 5,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "${DS_AZURE_MONITOR}"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "AppRequests\n| where $__timeFilter(TimeGenerated)\n| where AppRoleName == \"minibank-api\" and Name !has \"health\" and Name has \"/api/\"\n| summarize P95Ms = round(percentile(DurationMs, 95), 0)",
+            "resources": [
+              "$workspace"
+            ],
+            "resultFormat": "table"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 800
+              },
+              {
+                "color": "red",
+                "value": 1000
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {},
+      "description": "P95 response time of business requests on minibank-api. SLA target: below 1,000 ms."
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "P95 latency (ms) per business transaction",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "${DS_AZURE_MONITOR}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "${DS_AZURE_MONITOR}"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "AppRequests\n| where $__timeFilter(TimeGenerated) and AppRoleName == \"minibank-api\"\n| extend Transaction = case(Name endswith \"/api/transfer\", \"Transfer\", Name endswith \"/api/qris/pay\", \"QRIS\", Name endswith \"/statement\", \"Statement\", Name endswith \"/api/login\", \"Login\", \"\")\n| where Transaction != \"\"\n| summarize P95Ms = percentile(DurationMs, 95) by bin(TimeGenerated, 5m), Transaction\n| order by TimeGenerated asc",
+            "resources": [
+              "$workspace"
+            ],
+            "resultFormat": "time_series"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Technical failure rate % by cloud role (5xx)",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "${DS_AZURE_MONITOR}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "${DS_AZURE_MONITOR}"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "AppRequests\n| where $__timeFilter(TimeGenerated) and AppRoleName startswith \"minibank-\" and Name !has \"health\"\n| summarize Total = sum(ItemCount), Failed = sumif(ItemCount, toint(ResultCode) >= 500) by bin(TimeGenerated, 5m), AppRoleName\n| project TimeGenerated, AppRoleName, FailureRatePct = 100.0 * Failed / Total\n| order by TimeGenerated asc",
+            "resources": [
+              "$workspace"
+            ],
+            "resultFormat": "time_series"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Per business transaction: P95, technical failures, declines",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "${DS_AZURE_MONITOR}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "${DS_AZURE_MONITOR}"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "AppRequests\n| where $__timeFilter(TimeGenerated) and AppRoleName == \"minibank-api\"\n| extend Transaction = case(Name endswith \"/api/transfer\", \"Transfer\", Name endswith \"/api/qris/pay\", \"QRIS\", Name endswith \"/statement\", \"Statement\", Name endswith \"/api/login\", \"Login\", \"\")\n| where Transaction != \"\"\n| summarize Requests = sum(ItemCount), TechnicalFailedPct = round(100.0 * sumif(ItemCount, toint(ResultCode) >= 500) / sum(ItemCount), 2), Declines = sumif(ItemCount, ResultCode == \"409\"), P95Ms = round(percentile(DurationMs, 95), 0) by Transaction\n| order by Transaction asc",
+            "resources": [
+              "$workspace"
+            ],
+            "resultFormat": "table"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "Technical failures by cloud role",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "${DS_AZURE_MONITOR}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 14,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "${DS_AZURE_MONITOR}"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "union\n (AppRequests | where $__timeFilter(TimeGenerated) and toint(ResultCode) >= 500 | summarize Count = sum(ItemCount) by AppRoleName, Kind = \"Failed requests (5xx)\"),\n (AppExceptions | where $__timeFilter(TimeGenerated) | summarize Count = sum(ItemCount) by AppRoleName, Kind = \"Exceptions\")\n| where AppRoleName startswith \"minibank-\"\n| order by AppRoleName asc",
+            "resources": [
+              "$workspace"
+            ],
+            "resultFormat": "table"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "Top failed dependencies",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "${DS_AZURE_MONITOR}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "${DS_AZURE_MONITOR}"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "AppDependencies\n| where $__timeFilter(TimeGenerated) and Success == false and AppRoleName startswith \"minibank-\"\n| summarize Failed = sum(ItemCount) by AppRoleName, DependencyType, Target, Name, ResultCode\n| top 10 by Failed desc",
+            "resources": [
+              "$workspace"
+            ],
+            "resultFormat": "table"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Business declines vs technical failures (per 15 minutes)",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "${DS_AZURE_MONITOR}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "${DS_AZURE_MONITOR}"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "AppRequests\n| where $__timeFilter(TimeGenerated) and AppRoleName == \"minibank-api\" and Name !has \"health\" and Name has \"/api/\"\n| summarize ['Business declines (409)'] = sumif(ItemCount, ResultCode == \"409\"), ['Technical failures (5xx)'] = sumif(ItemCount, toint(ResultCode) >= 500) by bin(TimeGenerated, 15m)\n| order by TimeGenerated asc",
+            "resources": [
+              "$workspace"
+            ],
+            "resultFormat": "time_series"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Business declines (409)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Technical failures (5xx)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {},
+      "description": "Blue: business declines (HTTP 409). Red: technical failures (HTTP 5xx)."
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "Latest business declines (Insufficient balance)",
+      "datasource": {
+        "type": "grafana-azure-monitor-datasource",
+        "uid": "${DS_AZURE_MONITOR}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 30,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "${DS_AZURE_MONITOR}"
+          },
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "query": "AppRequests\n| where $__timeFilter(TimeGenerated) and AppRoleName == \"minibank-api\" and ResultCode == \"409\"\n| project Time = TimeGenerated, Transaction = case(Name endswith \"/api/transfer\", \"Transfer\", Name endswith \"/api/qris/pay\", \"QRIS\", Name), Result = \"Insufficient balance (409)\", DurationMs = round(DurationMs, 0), TraceId = OperationId\n| top 20 by Time desc",
+            "resources": [
+              "$workspace"
+            ],
+            "resultFormat": "table"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {},
+      "description": "Most recent declines with the trace ID to open in Application Insights (Transaction search)."
+    }
+  ]
+}

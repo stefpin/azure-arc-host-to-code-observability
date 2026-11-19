@@ -1,0 +1,8 @@
+// MiniBankDrillMinutes  (category: MiniBank Look-ahead; parameters: since:datetime)
+// MiniBankDrillMinutes(since:datetime) - Look-ahead v1.0 helper: every minute (UTC, 1-minute bins) covered by a drill window
+// after 'since'. Join with kind=leftanti on T = bin(TimeGenerated, 1m) to leave drills out.
+MiniBankDrills()
+| where DrillEnd > since
+| extend T = range(bin(DrillStart, 1m), DrillEnd, 1m)
+| mv-expand T to typeof(datetime)
+| distinct T

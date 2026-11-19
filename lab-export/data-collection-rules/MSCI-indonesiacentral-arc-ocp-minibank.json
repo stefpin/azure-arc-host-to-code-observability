@@ -1,0 +1,46 @@
+{
+  "dataFlows": [
+    {
+      "destinations": [
+        "la-workspace"
+      ],
+      "streams": [
+        "Microsoft-ContainerInsights-Group-Default"
+      ]
+    }
+  ],
+  "dataSources": {
+    "extensions": [
+      {
+        "extensionName": "ContainerInsights",
+        "extensionSettings": {
+          "dataCollectionSettings": {
+            "enableContainerLogV2": true
+          }
+        },
+        "name": "ContainerInsightsExtension",
+        "streams": [
+          "Microsoft-ContainerInsights-Group-Default"
+        ]
+      }
+    ]
+  },
+  "destinations": {
+    "logAnalytics": [
+      {
+        "name": "la-workspace",
+        "workspaceId": "<WORKSPACE_ID>",
+        "workspaceResourceId": "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+      }
+    ]
+  },
+  "immutableId": "dcr-<IMMUTABLE_ID>",
+  "kind": "Linux",
+  "location": "indonesiacentral",
+  "name": "MSCI-indonesiacentral-arc-ocp-minibank",
+  "resourceGroup": "rg-appmon-openshift-demo",
+  "tags": {
+    
+  },
+  "type": "Microsoft.Insights/dataCollectionRules"
+}

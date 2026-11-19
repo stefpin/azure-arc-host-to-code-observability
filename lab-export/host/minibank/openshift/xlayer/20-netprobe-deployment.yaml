@@ -1,0 +1,62 @@
+# minibank-netprobe (cross-layer lab v1.5): TCP connect time OpenShift -> back ends, JSON lines -> ContainerLogV2.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minibank-netprobe
+  namespace: minibank
+  labels:
+    app: minibank-netprobe
+    app.kubernetes.io/part-of: minibank-crosslayer-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minibank-netprobe
+  template:
+    metadata:
+      labels:
+        app: minibank-netprobe
+      annotations:
+        minibank/configmap-version: "1"
+    spec:
+      imagePullSecrets:
+        - name: acr-pull
+      terminationGracePeriodSeconds: 2
+      containers:
+        - name: netprobe
+          image: <ACR_NAME>.azurecr.io/minibank-transfer:1.2.0
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/bash", "/probe/netprobe.sh"]
+          env:
+            - name: PROBE_TARGETS
+              value: "oracle=192.168.110.32:1521 fraud=192.168.110.32:8082 api=192.168.110.31:8080"
+            - name: PROBE_INTERVAL
+              value: "15"
+            - name: PROBE_TIMEOUT
+              value: "3"
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: probe
+              mountPath: /probe
+              readOnly: true
+      volumes:
+        - name: probe
+          configMap:
+            name: minibank-netprobe

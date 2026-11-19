@@ -1,0 +1,8 @@
+// MiniBankDrills  (category: MiniBank Look-ahead; parameters: -)
+// MiniBankDrills() - Look-ahead v1.0 helper: lab drill windows (labelled, series and mystery test runs recorded in
+// MiniBankMystery_CL), each widened by 5 minutes after its end. Look-ahead baselines, trends and the service budget leave
+// these minutes out, so drills never count as normal behaviour.
+MiniBankMystery_CL
+| where isnotnull(StartUtc)
+| summarize EndUtc = max(EndUtc) by RunId, Slot, StartUtc
+| project RunId, Slot, DrillStart = StartUtc, DrillEnd = iff(isnull(EndUtc), StartUtc + 20m, EndUtc) + 5m

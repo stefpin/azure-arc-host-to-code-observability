@@ -1,0 +1,43 @@
+{
+  "dataCollectionEndpointId": "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.Insights/dataCollectionEndpoints/MSProm-indonesiacentral-arc-ocp-minibank",
+  "dataFlows": [
+    {
+      "destinations": [
+        "MonitoringAccount1"
+      ],
+      "streams": [
+        "Microsoft-PrometheusMetrics"
+      ]
+    }
+  ],
+  "dataSources": {
+    "prometheusForwarder": [
+      {
+        "labelIncludeFilter": {},
+        "name": "PrometheusDataSource",
+        "streams": [
+          "Microsoft-PrometheusMetrics"
+        ]
+      }
+    ]
+  },
+  "description": "DCR description",
+  "destinations": {
+    "monitoringAccounts": [
+      {
+        "accountId": "d1b33213-8bd7-5511-bf22-607ac98f4111",
+        "accountResourceId": "/subscriptions/<SUBSCRIPTION_ID>/resourcegroups/rg-appmon-openshift-demo/providers/microsoft.monitor/accounts/amw-appmon",
+        "name": "MonitoringAccount1"
+      }
+    ]
+  },
+  "immutableId": "dcr-<IMMUTABLE_ID>",
+  "kind": "Linux",
+  "location": "indonesiacentral",
+  "name": "MSProm-indonesiacentral-arc-ocp-minibank",
+  "resourceGroup": "rg-appmon-openshift-demo",
+  "tags": {
+    
+  },
+  "type": "Microsoft.Insights/dataCollectionRules"
+}

@@ -1,0 +1,275 @@
+// MiniBankTopology  (category: MiniBank cross-layer; parameters: at:datetime = datetime(null), reveal:string = 'show')
+// MiniBankTopology(at, reveal) - MiniBank live topology map v2 (runbook 1.9): the Grafana Canvas panel 'Live topology' on the cross-layer root-cause board.
+// DISPLAY ONLY - one row of box states. s_<box>: 0 normal, 1 signal or affected (not the cause), 2 root cause, 3 checking (verdict Pending),
+// 4 users impacted, 5 no data. c_<box> = same code (text colour), t_<box> = status line, e_<edge> = call edge (0 normal, 1 slow or failing),
+// te_<edge> = edge label. RED comes ONLY from the verdict MiniBankRootCause(at), which this function does not change; BLUE marks the first
+// signal while the verdict is Pending. Yellow = simple checks per box on the same data (calls and users: last 3 minutes; layer signals:
+// last 6 minutes, OpenShift restarts 9 minutes). reveal = 'hide' (mystery mode): red and blue are shown as yellow and the verdict is hidden.
+let t1 = iff(isnull(at), now(), at);
+let t0 = t1 - 6m;
+let t3 = t1 - 3m;
+let b0 = t0 - 60m;
+let hide = reveal == 'hide';
+let ms = (v: real) { iff(isnull(v), '-', iff(v >= 1000, strcat(round(v / 1000.0, 1), ' s'), strcat(tolong(round(v, 0)), ' ms'))) };
+let sfx = (st: long) { case(st == 2, ' – errors', st == 1, ' – slow', '') };
+// ---- verdict (rules unchanged) -------------------------------------------------------------------------------------------
+let V = MiniBankRootCause(t1) | take 1
+    | project vStatus = Status, vLayer = Layer, vComp = Component, vEv = Evidence, vImpact = Impact, vRule = Rule, k = 1;
+// ---- application requests: last 3 minutes vs a typical minute of the previous hour --------------------------------------------
+let roles = dynamic(['minibank-api', 'minibank-transfer', 'minibank-fraud']);
+let rqBase = AppRequests
+    | where TimeGenerated between (b0 .. t0) and AppRoleName in (roles)
+    | summarize P = percentile(DurationMs, 95) by AppRoleName, bin(TimeGenerated, 1m)
+    | summarize BaseP95 = percentile(P, 25) by AppRoleName;
+let RQ = AppRequests
+    | where TimeGenerated between (t3 .. t1) and AppRoleName in (roles)
+    | summarize N = sum(ItemCount), F = sumif(ItemCount, toint(ResultCode) >= 500), P95 = percentile(DurationMs, 95) by AppRoleName
+    | join kind=leftouter rqBase on AppRoleName
+    | extend Fp = round(100.0 * F / iff(N > 0, N, 1), 1)
+    | extend Sig = N >= 5 and (Fp > 2.0 or P95 >= max_of(300.0, 3.0 * coalesce(BaseP95, 100.0)))
+    | summarize aN = take_anyif(N, AppRoleName == 'minibank-api'), aFp = take_anyif(Fp, AppRoleName == 'minibank-api'),
+                aP = take_anyif(P95, AppRoleName == 'minibank-api'), aSig = take_anyif(Sig, AppRoleName == 'minibank-api'),
+                tN = take_anyif(N, AppRoleName == 'minibank-transfer'), tFp = take_anyif(Fp, AppRoleName == 'minibank-transfer'),
+                tP = take_anyif(P95, AppRoleName == 'minibank-transfer'), tSig = take_anyif(Sig, AppRoleName == 'minibank-transfer'),
+                fN = take_anyif(N, AppRoleName == 'minibank-fraud'), fFp = take_anyif(Fp, AppRoleName == 'minibank-fraud'),
+                fP = take_anyif(P95, AppRoleName == 'minibank-fraud'), fSig = take_anyif(Sig, AppRoleName == 'minibank-fraud')
+    | extend k = 1;
+// ---- exception spikes per service (same test as rule R6: >= 5 and > 5x a typical minute of the previous hour) -----------------
+let exBase = AppExceptions
+    | where TimeGenerated between (b0 .. t0) and AppRoleName startswith 'minibank-'
+    | make-series C = sum(ItemCount) default = 0 on TimeGenerated from b0 to t0 step 1m by AppRoleName, ExceptionType
+    | mv-expand C to typeof(double)
+    | summarize BasePerMin = percentile(C, 75) by AppRoleName, ExceptionType;
+let EX = AppExceptions
+    | where TimeGenerated between (t0 .. t1) and AppRoleName startswith 'minibank-'
+    | summarize Cnt = sum(ItemCount) by AppRoleName, ExceptionType
+    | join kind=leftouter exBase on AppRoleName, ExceptionType
+    | where Cnt >= 5 and Cnt > 5 * coalesce(BasePerMin, 0.0) * 6
+    | extend Short = extract(@'([A-Za-z0-9_]+)$', 1, ExceptionType)
+    | summarize arg_max(Cnt, Short) by AppRoleName
+    | summarize xA = take_anyif(strcat(Short, ' ×', Cnt), AppRoleName in ('minibank-api', 'minibank-web')),
+                xT = take_anyif(strcat(Short, ' ×', Cnt), AppRoleName == 'minibank-transfer'),
+                xF = take_anyif(strcat(Short, ' ×', Cnt), AppRoleName == 'minibank-fraud')
+    | extend k = 1;
+// ---- calls between services and to the databases (edges): last 3 minutes vs a typical minute of the previous hour ------------
+let dep = (a: datetime, b: datetime) {
+    AppDependencies
+    | where TimeGenerated between (a .. b) and AppRoleName in (roles)
+    | extend Edge = case(AppRoleName == 'minibank-api' and DependencyType == 'SQL', 'sql',
+                         AppRoleName == 'minibank-api' and Target contains 'minibank-transfer', 'at',
+                         AppRoleName == 'minibank-transfer' and Target contains 'minibank-rates', 'tr',
+                         AppRoleName == 'minibank-transfer' and Target contains ':8082', 'tf',
+                         AppRoleName == 'minibank-transfer' and DependencyType == 'oracle.db', 'to',
+                         AppRoleName == 'minibank-fraud' and DependencyType == 'postgresql', 'fp', '')
+    | where Edge != ''
+};
+let dBase = dep(b0, t0)
+    | summarize P = percentile(DurationMs, 95) by Edge, bin(TimeGenerated, 1m)
+    | summarize BaseP95 = percentile(P, 25) by Edge;
+let DP = dep(t3, t1)
+    | summarize N = sum(ItemCount), F = sumif(ItemCount, Success == false), P95 = percentile(DurationMs, 95) by Edge
+    | join kind=leftouter dBase on Edge
+    | extend St = case(F >= 2 and 100.0 * F / N > 2.0, 2, N >= 3 and P95 >= max_of(100.0, 5.0 * coalesce(BaseP95, 20.0)), 1, 0)
+    | summarize sqlN = take_anyif(N, Edge == 'sql'), sqlP = take_anyif(P95, Edge == 'sql'), sqlSt = take_anyif(St, Edge == 'sql'), sqlF = take_anyif(F, Edge == 'sql'),
+                atN = take_anyif(N, Edge == 'at'), atP = take_anyif(P95, Edge == 'at'), atSt = take_anyif(St, Edge == 'at'),
+                trN = take_anyif(N, Edge == 'tr'), trP = take_anyif(P95, Edge == 'tr'), trSt = take_anyif(St, Edge == 'tr'),
+                tfN = take_anyif(N, Edge == 'tf'), tfP = take_anyif(P95, Edge == 'tf'), tfSt = take_anyif(St, Edge == 'tf'),
+                toN = take_anyif(N, Edge == 'to'), toP = take_anyif(P95, Edge == 'to'), toSt = take_anyif(St, Edge == 'to'), toF = take_anyif(F, Edge == 'to'),
+                fpN = take_anyif(N, Edge == 'fp'), fpP = take_anyif(P95, Edge == 'fp'), fpSt = take_anyif(St, Edge == 'fp')
+    | extend k = 1;
+// ---- network: TCP connect from the OpenShift probe pod (6 minutes vs the previous hour) ---------------------------------------
+let probe = (a: datetime, b: datetime) {
+    ContainerLogV2
+    | where TimeGenerated between (a .. b) and PodNamespace == 'minibank' and ContainerName == 'netprobe'
+    | extend m = parse_json(tostring(LogMessage))
+    | where tostring(m.probe) == 'minibank-netprobe'
+    | project TimeGenerated, Path = iff(tostring(m.target) == 'api', 'win', 'rhel'), Ok = toint(m.ok), Ms = todouble(m.connectMs)
+};
+let pBase = probe(b0, t0) | summarize BaseP50 = percentile(Ms, 50) by Path;
+let PR = probe(t0, t1)
+    | summarize N = count(), Bad = countif(Ok == 0 or Ms > 50), P50 = percentile(Ms, 50) by Path
+    | join kind=leftouter pBase on Path
+    | extend Sig = N >= 4 and (Bad >= 2 or P50 > max_of(20.0, 3.0 * coalesce(BaseP50, 2.0)))
+    | summarize nwN = take_anyif(N, Path == 'win'), nwBad = take_anyif(Bad, Path == 'win'), nwP = take_anyif(P50, Path == 'win'), nwSig = take_anyif(Sig, Path == 'win'),
+                nrN = take_anyif(N, Path == 'rhel'), nrBad = take_anyif(Bad, Path == 'rhel'), nrP = take_anyif(P50, Path == 'rhel'), nrSig = take_anyif(Sig, Path == 'rhel')
+    | extend k = 1;
+// ---- VMs: CPU and memory of the Arc-enabled servers (latest sample; signal = 2 samples >= 85 % or 4-minute average >= 75 %) ------
+let VMP = Perf
+    | where TimeGenerated between (t0 .. t1)
+    | extend Vm = case(Computer startswith 'APP-WIN', 'win', Computer startswith 'APP-SQL', 'sql', Computer startswith 'app-rhel' or Computer startswith 'APP-RHEL', 'rhel', '')
+    | where Vm != ''
+    | where (ObjectName == 'Processor' and CounterName == '% Processor Time' and InstanceName in ('_Total', 'total'))
+         or (ObjectName == 'Memory' and CounterName in ('% Committed Bytes In Use', '% Used Memory'))
+    | extend K = iff(ObjectName == 'Processor', 'cpu', 'mem')
+    | summarize arg_max(TimeGenerated, CounterValue), Hot = countif(CounterValue >= 85 and TimeGenerated >= t1 - 4m),
+                Avg4 = avgif(CounterValue, TimeGenerated >= t1 - 4m), Mx = max(CounterValue) by Vm, K
+    | summarize cNow = take_anyif(CounterValue, K == 'cpu'), cHot = take_anyif(Hot, K == 'cpu'), cAvg = take_anyif(Avg4, K == 'cpu'),
+                cMx = take_anyif(Mx, K == 'cpu'), mNow = take_anyif(CounterValue, K == 'mem') by Vm
+    | extend Sig = coalesce(cHot, 0) >= 2 or coalesce(cAvg, 0.0) >= 75 or coalesce(mNow, 0.0) >= 92
+    | extend Txt = strcat('CPU ', tolong(round(iff(Sig, cMx, cNow), 0)), ' % · mem ', tolong(round(mNow, 0)), ' %')
+    | summarize vsN = countif(Vm == 'sql'), vsSig = take_anyif(Sig, Vm == 'sql'), vsTxt = take_anyif(Txt, Vm == 'sql'),
+                vwN = countif(Vm == 'win'), vwSig = take_anyif(Sig, Vm == 'win'), vwTxt = take_anyif(Txt, Vm == 'win'),
+                vrN = countif(Vm == 'rhel'), vrSig = take_anyif(Sig, Vm == 'rhel'), vrTxt = take_anyif(Txt, Vm == 'rhel')
+    | extend k = 1;
+// ---- OpenShift nodes (Ready status; CPU and memory from Container insights) -----------------------------------------------------
+let ND = KubeNodeInventory
+    | where TimeGenerated between (t1 - 10m .. t1)
+    | summarize arg_max(TimeGenerated, Status) by Computer
+    | join kind=leftouter (Perf
+        | where TimeGenerated between (t0 .. t1) and ObjectName == 'K8SNode'
+              and CounterName in ('cpuUsageNanoCores', 'cpuCapacityNanoCores', 'memoryWorkingSetBytes', 'memoryCapacityBytes')
+        | summarize arg_max(TimeGenerated, CounterValue) by Computer, CounterName
+        | summarize Cpu = 100.0 * take_anyif(CounterValue, CounterName == 'cpuUsageNanoCores') / take_anyif(CounterValue, CounterName == 'cpuCapacityNanoCores'),
+                    Mem = 100.0 * take_anyif(CounterValue, CounterName == 'memoryWorkingSetBytes') / take_anyif(CounterValue, CounterName == 'memoryCapacityBytes') by Computer
+        ) on Computer
+    | extend Sig = Status != 'Ready' or coalesce(Cpu, 0.0) >= 90 or coalesce(Mem, 0.0) >= 95
+    | extend Txt = strcat('● ', iff(Status == 'Ready', 'Ready', toupper(Status)), iff(isnotnull(Cpu), strcat(' · CPU ', tolong(round(Cpu, 0)), ' %'), ''),
+                          iff(coalesce(Mem, 0.0) >= 90, strcat(' · mem ', tolong(round(Mem, 0)), ' %'), ''))
+    | summarize n1 = take_anyif(Sig, Computer == 'ocp-node-1'), n1t = take_anyif(Txt, Computer == 'ocp-node-1'),
+                n2 = take_anyif(Sig, Computer == 'ocp-node-2'), n2t = take_anyif(Txt, Computer == 'ocp-node-2'),
+                n3 = take_anyif(Sig, Computer == 'ocp-node-3'), n3t = take_anyif(Txt, Computer == 'ocp-node-3'),
+                nNotReady = countif(Status != 'Ready')
+    | extend k = 1;
+// ---- OpenShift workloads in namespace minibank (restarts or kills in 9 minutes, pods running now) --------------------------------
+let PD = KubePodInventory
+    | where TimeGenerated between (t1 - 9m .. t1) and Namespace == 'minibank'
+    | extend Container = tostring(split(ContainerName, '/')[1]), ls = parse_json(ContainerLastStatus)
+    | where not(Container startswith 'opentelemetry-auto-instrumentation')
+    | extend Reason = tostring(ls.reason), Fin = todatetime(ls.finishedAt)
+    | summarize Rs = max(ContainerRestartCount) - min(ContainerRestartCount), Kills = dcountif(Fin, Fin between ((t1 - 9m) .. t1)),
+                Oom = countif(Reason == 'OOMKilled' and Fin between ((t1 - 9m) .. t1)), Seen = max(TimeGenerated),
+                arg_max(TimeGenerated, PodStatus, ContainerStatus) by Name, Container
+    | summarize Ev = sum(max_of(tolong(Rs), tolong(Kills))), OomN = sum(Oom), PodsNow = dcountif(Name, Seen >= t1 - 3m),
+                RunNow = dcountif(Name, Seen >= t1 - 3m and PodStatus == 'Running' and ContainerStatus == 'running')
+    | extend k = 1;
+// ---- IIS log on APP-WIN (port 8080; arrives about 2-3 minutes late, so 6 minutes) -----------------------------------------------
+let IS = W3CIISLog
+    | where TimeGenerated between (t0 .. t1) and Computer startswith 'APP-WIN' and sPort == 8080
+    | summarize iN = count(), i5 = countif(scStatus startswith '5'), iP = percentile(TimeTaken, 95)
+    | extend iPct = round(100.0 * i5 / iff(iN > 0, iN, 1), 1)
+    | extend iSig = iN >= 10 and (iPct > 2.0 or iP >= 1000)
+    | extend k = 1;
+// ---- database snapshot from APP-RHEL every 60 s (Oracle schema check, alert log, locks, PostgreSQL sessions) -------------------
+let SN = MiniBankDbSnap_CL
+    | where TimeGenerated between (t0 .. t1)
+    | summarize sN = count(), lMiss = countif(SnapshotType == 'schema' and Name == 'LEDGER_ENTRY' and Value == 0),
+                pgN = countif(Detail contains 'datname=minibank'), oraErr = sumif(Value, SnapshotType == 'errors'), blocked = sumif(Value, SnapshotType == 'locks')
+    | extend k = 1;
+// ---- Hyper-V host HV-HOST-02 (v2): true load from the hypervisor, the host's Windows view, CPU waits per VM against the
+// lower quartile of the previous hour (yellow at >= 3x), and the VM using the most logical processors (last 3 minutes) ------
+let hp = (a: datetime, b: datetime) { Perf | where TimeGenerated between (a .. b) and Computer startswith 'HV-HOST-02' };
+let hvp = (a: datetime, b: datetime) { hp(a, b) | where ObjectName == 'Hyper-V Hypervisor Virtual Processor' and InstanceName != '_Total'
+    | extend VM = tostring(split(InstanceName, ':')[0]) };
+let HL = hp(t3, t1)
+    | where InstanceName == '_Total' and ((ObjectName == 'Hyper-V Hypervisor Logical Processor' and CounterName == '% Total Run Time') or (ObjectName == 'Processor' and CounterName == '% Processor Time'))
+    | summarize hLp = avgif(CounterValue, ObjectName startswith 'Hyper'), hWin = avgif(CounterValue, ObjectName == 'Processor'), hN = countif(ObjectName startswith 'Hyper')
+    | extend k = 1;
+let HX = hvp(t3, t1) | where CounterName == 'CPU Wait Time Per Dispatch' | summarize W = avg(CounterValue) by VM
+    | join kind=leftouter (hvp(b0, t0) | where CounterName == 'CPU Wait Time Per Dispatch' | summarize Base = percentile(CounterValue, 25) by VM) on VM
+    | extend X = iff(coalesce(Base, 0.0) > 0, W / Base, real(null))
+    | summarize xWin = take_anyif(X, VM == 'APP-WIN'), xSql = take_anyif(X, VM == 'APP-SQL'), xRhel = take_anyif(X, VM == 'APP-RHEL'),
+                x1 = take_anyif(X, VM == 'OCP-NODE-1'), x2 = take_anyif(X, VM == 'OCP-NODE-2'), x3 = take_anyif(X, VM == 'OCP-NODE-3'),
+                hNWait = countif(X >= 3.0 and VM != 'BATCH-EOD'), hMaxX = maxif(X, VM != 'BATCH-EOD')
+    | extend k = 1;
+let HU = hvp(t3, t1) | where CounterName == '% Total Run Time' | summarize U = sum(CounterValue) / 100.0, V = dcount(InstanceName) by VM, TimeGenerated
+    | summarize U = avg(U), V = max(V) by VM
+    | summarize arg_max(U, VM, V)
+    | project hTopU = U, hTopVm = VM, hTopV = V, k = 1;
+// ---- one row: verdict + all checks ----------------------------------------------------------------------------------------
+V
+| join kind=inner RQ on k | join kind=inner EX on k | join kind=inner DP on k | join kind=inner PR on k | join kind=inner VMP on k
+| join kind=inner ND on k | join kind=inner PD on k | join kind=inner IS on k | join kind=inner SN on k
+| join kind=leftouter HL on k | join kind=leftouter HX on k | join kind=leftouter HU on k
+| extend isRoot = vStatus == 'RootCause', pend = vStatus == 'Pending'
+| extend usersImp = vStatus in ('RootCause', 'Unclassified', 'Pending'), fewSlow = vRule startswith 'R8'
+| extend pRule = iff(pend, extract(@'first signal so far: [A-Za-z]+ \((R\d)', 1, vEv), '')
+// RED: the box the verdict names (a network verdict can name both paths)
+| extend rBox = case(not(isRoot), '',
+        vLayer == 'Database' and vComp contains 'Oracle', 'oracle',
+        vLayer == 'Database' and vComp contains 'SQL Server', 'sql',
+        vLayer == 'OpenShift', 'ocp',
+        vLayer == 'VM' and vComp startswith 'APP-WIN', 'vm_win',
+        vLayer == 'VM' and vComp startswith 'APP-SQL', 'vm_sql',
+        vLayer == 'VM' and vComp startswith 'APP-RHEL', 'vm_rhel',
+        vLayer == 'Application' and vComp in ('minibank-api', 'minibank-web'), 'web_api',
+        vLayer == 'Application' and vComp == 'minibank-transfer', 'transfer',
+        vLayer == 'Application' and vComp == 'minibank-fraud', 'fraud',
+        vLayer == 'Host', 'host',
+        vLayer == 'Network', strcat(iff(vComp contains 'APP-WIN', 'net_win ', ''), iff(vComp contains 'APP-RHEL', 'net_rhel', '')), '')
+// BLUE while Pending: the box behind the first signal (R5 database slow or R6 exception spike)
+| extend cBox = case(pRule == 'R6' and isnotempty(xA), 'web_api', pRule == 'R6' and isnotempty(xT), 'transfer', pRule == 'R6' and isnotempty(xF), 'fraud',
+                     pRule == 'R5' and (coalesce(toSt, 0) > 0 or lMiss > 0), 'oracle', pRule == 'R5' and coalesce(sqlSt, 0) > 0, 'sql', '')
+| extend uN = toint(extract(@'^(\d+) business', 1, vImpact)), uF = todouble(extract(@': ([0-9.]+) % failed', 1, vImpact)),
+         uP = todouble(extract(@'P95 ([0-9.]+) ms', 1, vImpact)), uJ = toint(extract(@'failed robot journeys (\d+)', 1, vImpact))
+| extend s_users = case(usersImp, 4, fewSlow, 1, 0)
+| extend t_users = strcat('● ', case(s_users == 4, 'USERS IMPACTED', s_users == 1, 'A FEW SLOW TRANSACTIONS', 'USERS OK'), ' · P95 ', ms(uP), ' · ',
+                          coalesce(uF, 0.0), ' % failed · ', coalesce(uN, 0), ' tx / 3 min', iff(uJ > 0, strcat(' · ', uJ, ' failed robot journeys'), ''))
+| extend s_web_api = case(rBox == 'web_api', iff(hide, 1, 2), cBox == 'web_api', iff(hide, 1, 3), coalesce(aSig, false) or isnotempty(xA) or usersImp or fewSlow, 1, coalesce(aN, 0) == 0, 5, 0)
+| extend t_web_api = case(s_web_api == 2, strcat('● ROOT CAUSE (R6) – ', extract(@'(?:[A-Za-z0-9_]+\.)*([A-Za-z0-9_]+) x', 1, vEv), ' ×', extract(@' x(\d+) ', 1, vEv)), s_web_api == 3, '● CHECKING – first signal (R6), waiting for every layer', s_web_api == 1, iff(coalesce(aSig, false) or isnotempty(xA) or usersImp or fewSlow, iff(isnotempty(xA), strcat('● SIGNAL – ', xA), strcat('● AFFECTED – P95 ', ms(aP), ' · ', coalesce(aFp, 0.0), ' % failed')), '● SIGNAL – see the layer panels below'), s_web_api == 5, '● NO DATA – no requests in 3 min', strcat('● OK – P95 ', ms(aP), ' · ', coalesce(aFp, 0.0), ' % failed'))
+| extend s_transfer = case(rBox == 'transfer', iff(hide, 1, 2), cBox == 'transfer', iff(hide, 1, 3), coalesce(tSig, false) or isnotempty(xT) or coalesce(toSt, 0) > 0 or coalesce(tfSt, 0) > 0 or coalesce(trSt, 0) > 0, 1, coalesce(tN, 0) == 0, 5, 0)
+| extend t_transfer = case(s_transfer == 2, strcat('● ROOT CAUSE (R6) – ', extract(@'(?:[A-Za-z0-9_]+\.)*([A-Za-z0-9_]+) x', 1, vEv), ' ×', extract(@' x(\d+) ', 1, vEv)), s_transfer == 3, '● CHECKING – first signal (R6), waiting for every layer', s_transfer == 1, iff(coalesce(tSig, false) or isnotempty(xT) or coalesce(toSt, 0) > 0 or coalesce(tfSt, 0) > 0 or coalesce(trSt, 0) > 0, case(isnotempty(xT), strcat('● SIGNAL – ', xT), coalesce(tSig, false), strcat('● AFFECTED – P95 ', ms(tP), ' · ', coalesce(tFp, 0.0), ' % failed'), '● AFFECTED – slow calls out'), '● SIGNAL – see the layer panels below'), s_transfer == 5, '● NO DATA – no requests in 3 min', strcat('● OK – P95 ', ms(tP), ' · ', coalesce(tFp, 0.0), ' % failed'))
+| extend s_rates = case(false, iff(hide, 1, 2), false, iff(hide, 1, 3), coalesce(trSt, 0) > 0, 1, coalesce(trN, 0) == 0, 5, 0)
+| extend t_rates = case(s_rates == 2, '● SIGNAL – see the layer panels below', s_rates == 3, '● SIGNAL – see the layer panels below', s_rates == 1, iff(coalesce(trSt, 0) > 0, strcat('● SIGNAL – calls ', iff(trSt == 2, 'failing', strcat('slow (p95 ', ms(trP), ')'))), '● SIGNAL – see the layer panels below'), s_rates == 5, '● NO DATA – no calls in 3 min', strcat('● OK – calls p95 ', ms(trP)))
+| extend s_fraud = case(rBox == 'fraud', iff(hide, 1, 2), cBox == 'fraud', iff(hide, 1, 3), coalesce(fSig, false) or isnotempty(xF) or coalesce(fpSt, 0) > 0, 1, coalesce(fN, 0) == 0, 5, 0)
+| extend t_fraud = case(s_fraud == 2, strcat('● ROOT CAUSE (R6) – ', extract(@'(?:[A-Za-z0-9_]+\.)*([A-Za-z0-9_]+) x', 1, vEv), ' ×', extract(@' x(\d+) ', 1, vEv)), s_fraud == 3, '● CHECKING – first signal (R6), waiting for every layer', s_fraud == 1, iff(coalesce(fSig, false) or isnotempty(xF) or coalesce(fpSt, 0) > 0, case(isnotempty(xF), strcat('● SIGNAL – ', xF), coalesce(fSig, false), strcat('● AFFECTED – P95 ', ms(fP), ' · ', coalesce(fFp, 0.0), ' % failed'), '● AFFECTED – slow database calls'), '● SIGNAL – see the layer panels below'), s_fraud == 5, '● NO DATA – no requests in 3 min', strcat('● OK – P95 ', ms(fP), ' · ', coalesce(fFp, 0.0), ' % failed'))
+| extend s_sql = case(rBox == 'sql', iff(hide, 1, 2), cBox == 'sql', iff(hide, 1, 3), coalesce(sqlSt, 0) > 0, 1, coalesce(sqlN, 0) == 0, 5, 0)
+| extend t_sql = case(s_sql == 2, strcat('● ROOT CAUSE (R5) – ', extract(@'database calls ([0-9.]+) s per minute', 1, vEv), ' s database time per minute'), s_sql == 3, '● CHECKING – first signal (R5), waiting for every layer', s_sql == 1, iff(coalesce(sqlSt, 0) > 0, strcat('● SIGNAL – calls ', iff(sqlSt == 2, strcat('failing (', sqlF, ')'), strcat('slow (p95 ', ms(sqlP), ')'))), '● SIGNAL – see the layer panels below'), s_sql == 5, '● NO CALLS in 3 min', strcat('● OK – calls p95 ', ms(sqlP)))
+| extend s_oracle = case(rBox == 'oracle', iff(hide, 1, 2), cBox == 'oracle', iff(hide, 1, 3), lMiss > 0 or coalesce(toSt, 0) > 0, 1, coalesce(toN, 0) == 0 and sN == 0, 5, 0)
+| extend t_oracle = case(s_oracle == 2, iff(vRule startswith 'R1', '● ROOT CAUSE (R1) – table LEDGER_ENTRY missing', strcat('● ROOT CAUSE (R5) – ', extract(@'database calls ([0-9.]+) s per minute', 1, vEv), ' s database time per minute')), s_oracle == 3, '● CHECKING – first signal (R5), waiting for every layer', s_oracle == 1, iff(lMiss > 0 or coalesce(toSt, 0) > 0, case(lMiss > 0, '● SIGNAL – table LEDGER_ENTRY missing', toSt == 2, strcat('● SIGNAL – ', toF, ' failed calls'), strcat('● SIGNAL – calls slow (p95 ', ms(toP), ')')), '● SIGNAL – see the layer panels below'), s_oracle == 5, '● NO DATA', strcat('● OK – ledger table present · calls p95 ', ms(toP)))
+| extend s_pg = case(false, iff(hide, 1, 2), false, iff(hide, 1, 3), coalesce(fpSt, 0) > 0, 1, coalesce(fpN, 0) == 0 and pgN == 0, 5, 0)
+| extend t_pg = case(s_pg == 2, '● SIGNAL – see the layer panels below', s_pg == 3, '● SIGNAL – see the layer panels below', s_pg == 1, iff(coalesce(fpSt, 0) > 0, strcat('● SIGNAL – calls ', iff(fpSt == 2, 'failing', strcat('slow (p95 ', ms(fpP), ')'))), '● SIGNAL – see the layer panels below'), s_pg == 5, '● NO DATA', strcat('● OK – up · calls p95 ', ms(fpP)))
+| extend s_iis = case(false, iff(hide, 1, 2), false, iff(hide, 1, 3), coalesce(iSig, false), 1, iN == 0, 5, 0)
+| extend t_iis = case(s_iis == 2, '● SIGNAL – see the layer panels below', s_iis == 3, '● SIGNAL – see the layer panels below', s_iis == 1, iff(coalesce(iSig, false), strcat('● SIGNAL – ', iPct, ' % 5xx · P95 ', ms(todouble(iP))), '● SIGNAL – see the layer panels below'), s_iis == 5, '● NO DATA – IIS log not in yet', strcat('● OK – no 5xx · P95 ', ms(todouble(iP))))
+| extend s_ocp = case(rBox == 'ocp', iff(hide, 1, 2), false, iff(hide, 1, 3), Ev > 0 or PodsNow > RunNow or nNotReady > 0, 1, PodsNow == 0, 5, 0)
+| extend t_ocp = case(s_ocp == 2, strcat('● ROOT CAUSE (R2) – ', extract(@'^(\d+ container restarts in \d+ pods)', 1, vEv), iff(vEv contains 'OOMKilled', ' (OOMKilled)', '')), s_ocp == 3, '● SIGNAL – see the layer panels below', s_ocp == 1, iff(Ev > 0 or PodsNow > RunNow or nNotReady > 0, case(Ev > 0, strcat('● SIGNAL – ', Ev, ' container restarts', iff(OomN > 0, ' (OOMKilled)', '')), nNotReady > 0, strcat('● SIGNAL – ', nNotReady, ' node(s) not Ready'), strcat('● SIGNAL – ', PodsNow - RunNow, ' pod(s) not running')), '● SIGNAL – see the layer panels below'), s_ocp == 5, '● NO DATA – no pod inventory', strcat('● OK – ', RunNow, ' pods running, no restarts'))
+| extend s_podman = case(false, iff(hide, 1, 2), false, iff(hide, 1, 3), oraErr > 0 or blocked > 0, 1, sN == 0, 5, 0)
+| extend t_podman = case(s_podman == 2, '● SIGNAL – see the layer panels below', s_podman == 3, '● SIGNAL – see the layer panels below', s_podman == 1, iff(oraErr > 0 or blocked > 0, strcat('● SIGNAL – ', iff(oraErr > 0, 'Oracle alert-log errors', 'blocked database sessions')), '● SIGNAL – see the layer panels below'), s_podman == 5, '● NO DATA – no DB snapshot in 6 min', '● OK – Oracle + PostgreSQL answering')
+| extend s_net_win = case(rBox has 'net_win', iff(hide, 1, 2), false, iff(hide, 1, 3), coalesce(nwSig, false), 1, coalesce(nwN, 0) == 0, 5, 0)
+| extend t_net_win = case(s_net_win == 2, strcat('● ROOT CAUSE (R3) – TCP connect slow or lost: ', extract(@'api \(APP-WIN[^;]*slow or lost (\d+ of \d+)', 1, vEv), ' probes'), s_net_win == 3, '● SIGNAL – see the layer panels below', s_net_win == 1, iff(coalesce(nwSig, false), strcat('● SIGNAL – slow or lost ', nwBad, ' of ', nwN, ' probes'), '● SIGNAL – see the layer panels below'), s_net_win == 5, '● NO DATA – probe pod silent', strcat('● normal – connect ', round(nwP, 1), ' ms (', nwN, ' probes)'))
+| extend s_net_rhel = case(rBox has 'net_rhel', iff(hide, 1, 2), false, iff(hide, 1, 3), coalesce(nrSig, false), 1, coalesce(nrN, 0) == 0, 5, 0)
+| extend t_net_rhel = case(s_net_rhel == 2, strcat('● ROOT CAUSE (R3) – TCP connect slow or lost: ', extract(@'\(APP-RHEL:\d+\)[^;]*slow or lost (\d+ of \d+)', 1, vEv), ' probes'), s_net_rhel == 3, '● SIGNAL – see the layer panels below', s_net_rhel == 1, iff(coalesce(nrSig, false), strcat('● SIGNAL – slow or lost ', nrBad, ' of ', nrN, ' probes'), '● SIGNAL – see the layer panels below'), s_net_rhel == 5, '● NO DATA – probe pod silent', strcat('● normal – connect ', round(nrP, 1), ' ms (', nrN, ' probes)'))
+| extend s_vm_sql = case(rBox == 'vm_sql', iff(hide, 1, 2), false, iff(hide, 1, 3), coalesce(vsSig, false), 1, vsN == 0, 5, 0)
+| extend t_vm_sql = case(s_vm_sql == 2, strcat('● ROOT CAUSE (R4) – CPU ', extract(@'CPU (\d+) %', 1, vEv), ' %', iff(vEv contains 'busiest process', strcat(' · busiest: ', extract(@'busiest process: ([^ (]+)', 1, vEv)), '')), s_vm_sql == 3, '● SIGNAL – see the layer panels below', s_vm_sql == 1, iff(coalesce(vsSig, false), strcat('● SIGNAL – ', vsTxt), '● SIGNAL – see the layer panels below'), s_vm_sql == 5, '● NO DATA – no performance samples', strcat('● OK – ', vsTxt))
+| extend s_vm_win = case(rBox == 'vm_win', iff(hide, 1, 2), false, iff(hide, 1, 3), coalesce(vwSig, false), 1, vwN == 0, 5, 0)
+| extend t_vm_win = case(s_vm_win == 2, strcat('● ROOT CAUSE (R4) – CPU ', extract(@'CPU (\d+) %', 1, vEv), ' %', iff(vEv contains 'busiest process', strcat(' · busiest: ', extract(@'busiest process: ([^ (]+)', 1, vEv)), '')), s_vm_win == 3, '● SIGNAL – see the layer panels below', s_vm_win == 1, iff(coalesce(vwSig, false), strcat('● SIGNAL – ', vwTxt), '● SIGNAL – see the layer panels below'), s_vm_win == 5, '● NO DATA – no performance samples', strcat('● OK – ', vwTxt))
+| extend s_vm_rhel = case(rBox == 'vm_rhel', iff(hide, 1, 2), false, iff(hide, 1, 3), coalesce(vrSig, false), 1, vrN == 0, 5, 0)
+| extend t_vm_rhel = case(s_vm_rhel == 2, strcat('● ROOT CAUSE (R4) – CPU ', extract(@'CPU (\d+) %', 1, vEv), ' %', iff(vEv contains 'busiest process', strcat(' · busiest: ', extract(@'busiest process: ([^ (]+)', 1, vEv)), '')), s_vm_rhel == 3, '● SIGNAL – see the layer panels below', s_vm_rhel == 1, iff(coalesce(vrSig, false), strcat('● SIGNAL – ', vrTxt), '● SIGNAL – see the layer panels below'), s_vm_rhel == 5, '● NO DATA – no performance samples', strcat('● OK – ', vrTxt))
+| extend s_n1 = case(isnull(n1), 5, n1, 1, 0), t_n1 = coalesce(n1t, '● NO DATA'), s_n2 = case(isnull(n2), 5, n2, 1, 0), t_n2 = coalesce(n2t, '● NO DATA'),
+         s_n3 = case(isnull(n3), 5, n3, 1, 0), t_n3 = coalesce(n3t, '● NO DATA')
+| extend ww = s_vm_win == 0 and coalesce(xWin, 0.0) >= 3.0, ws = s_vm_sql == 0 and coalesce(xSql, 0.0) >= 3.0, wr = s_vm_rhel == 0 and coalesce(xRhel, 0.0) >= 3.0
+| extend s_vm_win = iff(ww, 1, s_vm_win), t_vm_win = iff(ww, strcat('● WAITING FOR CPU – ', round(xWin, 1), 'x normal · ', vwTxt), t_vm_win),
+         s_vm_sql = iff(ws, 1, s_vm_sql), t_vm_sql = iff(ws, strcat('● WAITING FOR CPU – ', round(xSql, 1), 'x normal · ', vsTxt), t_vm_sql),
+         s_vm_rhel = iff(wr, 1, s_vm_rhel), t_vm_rhel = iff(wr, strcat('● WAITING FOR CPU – ', round(xRhel, 1), 'x normal · ', vrTxt), t_vm_rhel)
+| extend w1 = s_n1 == 0 and coalesce(x1, 0.0) >= 3.0, w2 = s_n2 == 0 and coalesce(x2, 0.0) >= 3.0, w3 = s_n3 == 0 and coalesce(x3, 0.0) >= 3.0
+| extend s_n1 = iff(w1, 1, s_n1), t_n1 = iff(w1, strcat(t_n1, ' · waits ', round(x1, 1), 'x'), t_n1),
+         s_n2 = iff(w2, 1, s_n2), t_n2 = iff(w2, strcat(t_n2, ' · waits ', round(x2, 1), 'x'), t_n2),
+         s_n3 = iff(w3, 1, s_n3), t_n3 = iff(w3, strcat(t_n3, ' · waits ', round(x3, 1), 'x'), t_n3)
+| extend s_host = case(rBox == 'host', iff(hide, 1, 2), coalesce(hLp, 0.0) >= 65 or coalesce(hNWait, 0) >= 2, 1, coalesce(hN, 0) == 0, 5, 0)
+| extend t_host = strcat(case(s_host == 2, '● ROOT CAUSE (R9) – CPU contention', s_host == 1, '● SIGNAL – host CPU busy', s_host == 5, '● NO DATA – host counters not in yet', '● OK'),
+                         iff(s_host == 5, '', strcat(' · true load ', tolong(round(coalesce(hLp, 0.0), 0)), ' % (Windows on the host shows ', tolong(round(coalesce(hWin, 0.0), 0)), ' %) · ',
+                                                      coalesce(hNWait, 0), ' VMs waiting >= 3x',
+                                                      iff(isnotempty(hTopVm) and coalesce(hTopU, 0.0) >= 3.0, strcat(' · biggest: ', hTopVm, ' ', round(hTopU, 1), ' of 20 logical processors'), ''))))
+| extend e_users = iff(usersImp or fewSlow, 1, 0), e_sql = iff(coalesce(sqlSt, 0) > 0, 1, 0), e_at = iff(coalesce(atSt, 0) > 0, 1, 0),
+         e_tr = iff(coalesce(trSt, 0) > 0, 1, 0), e_tf = iff(coalesce(tfSt, 0) > 0, 1, 0), e_to = iff(coalesce(toSt, 0) > 0, 1, 0), e_fp = iff(coalesce(fpSt, 0) > 0, 1, 0)
+| extend te_sql = strcat('SQL', sfx(coalesce(sqlSt, 0))), te_tf = strcat('fraud check :8082', sfx(coalesce(tfSt, 0))),
+         te_to = strcat('ledger :1521', sfx(coalesce(toSt, 0))), te_fp = 'SQL', te_at = 'HTTP', te_tr = 'HTTP'
+| extend s_verdict = iff(hide, 5, case(vStatus == 'Healthy', 0, vStatus == 'Warning', 1, vStatus == 'Pending', 3, vStatus == 'Unclassified', 4, vStatus == 'RootCause', 2, 5))
+| extend t_verdict = iff(hide, 'Verdict hidden – mystery mode: the map shows signals only (yellow), no red until the reveal',
+                         strcat('Verdict: ', case(vStatus == 'RootCause', 'ROOT CAUSE', vStatus == 'Pending', 'CHECKING EVERY LAYER', toupper(vStatus)), ' – ', vLayer,
+                                iff(vStatus in ('Healthy', 'Pending'), '', strcat(' · ', vComp)), iff(isnotempty(vRule) and vStatus != 'Pending', strcat(' · rule ', extract(@'^(R\d)', 1, vRule)), ''))),
+         t_verdict2 = iff(hide, 'Ask the audience for their answer first, then switch Verdict to show.', iff(strlen(vEv) > 240, strcat(substring(vEv, 0, 237), '...'), vEv))
+| extend t_footer = strcat('Red only from the verdict MiniBankRootCause · yellow = simple checks per box · click a box for its evidence · data as of ',
+                           format_datetime(t1 + 7h, 'HH:mm:ss'), ' WIB')
+| project TimeGenerated = t1, s_users, c_users = s_users, t_users, s_web_api, c_web_api = s_web_api,
+          t_web_api, s_transfer, c_transfer = s_transfer, t_transfer, s_rates, c_rates = s_rates,
+          t_rates, s_fraud, c_fraud = s_fraud, t_fraud, s_sql, c_sql = s_sql,
+          t_sql, s_oracle, c_oracle = s_oracle, t_oracle, s_pg, c_pg = s_pg,
+          t_pg, s_iis, c_iis = s_iis, t_iis, s_ocp, c_ocp = s_ocp,
+          t_ocp, s_podman, c_podman = s_podman, t_podman, s_net_win, c_net_win = s_net_win,
+          t_net_win, s_net_rhel, c_net_rhel = s_net_rhel, t_net_rhel, s_vm_sql, c_vm_sql = s_vm_sql,
+          t_vm_sql, s_vm_win, c_vm_win = s_vm_win, t_vm_win, s_vm_rhel, c_vm_rhel = s_vm_rhel,
+          t_vm_rhel, s_n1, c_n1 = s_n1, t_n1, s_n2, c_n2 = s_n2,
+          t_n2, s_n3, c_n3 = s_n3, t_n3, s_verdict, c_verdict = s_verdict,
+          t_verdict, t_verdict2, e_users, e_sql, e_at, e_tr,
+          e_tf, e_to, e_fp, te_sql, te_at, te_tr,
+          te_tf, te_to, te_fp, t_footer, s_host, c_host = s_host, t_host

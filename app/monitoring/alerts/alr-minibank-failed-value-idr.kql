@@ -1,0 +1,31 @@
+// alr-minibank-failed-value-idr (MiniBank v1.4, P1 feature D) - log search alert, severity 2, no action group.
+// Scope: Application Insights appi-minibank (placeholder APPI_ID), so the query uses the Application Insights schema
+// (requests, customDimensions). Evaluated every 5 minutes over the last 10 minutes.
+// Measure: FailedValueIdr, aggregation Total, operator >= 100000000: the alert fires when the failed (HTTP 5xx) Transfer
+// and QRIS payments of the last 10 minutes are worth IDR 100,000,000 or more. The fired alert shows the IDR value.
+// The API sets the tags before it calls minibank-transfer, so failed payments carry minibank.amountIdr (a string in
+// customDimensions / AppRequests.Properties, hence todouble). Business declines (HTTP 409) are not counted.
+// Created by monitoring/alerts/create-p1-alerts.ps1 (template minibank-p1-alerts.json).
+//
+// ---- Rule query (Application Insights scope) ----
+requests
+| where cloud_RoleName == "minibank-api" and (name endswith "/api/transfer" or name endswith "/api/qris/pay")
+| where toint(resultCode) >= 500
+| extend FailedValueIdr = todouble(customDimensions["minibank.amountIdr"]) * itemCount
+| project timestamp, FailedValueIdr
+
+// ---- Fallback if the portal rejects the measure: same condition as Table rows > 0 (aggregation Count, threshold 0) ----
+// requests
+// | where cloud_RoleName == "minibank-api" and (name endswith "/api/transfer" or name endswith "/api/qris/pay")
+// | where toint(resultCode) >= 500
+// | summarize FailedValueIdr = sum(todouble(customDimensions["minibank.amountIdr"]) * itemCount), FailedPayments = sum(itemCount)
+// | where FailedValueIdr >= 100000000
+
+// ---- Same check in law-appmon > Logs (Log Analytics schema: AppRequests, Properties) ----
+AppRequests
+| where TimeGenerated > ago(10m)
+| where AppRoleName == "minibank-api" and (Name endswith "/api/transfer" or Name endswith "/api/qris/pay")
+| where toint(ResultCode) >= 500
+| summarize FailedValueIdr = sum(todouble(Properties["minibank.amountIdr"]) * ItemCount), FailedPayments = sum(ItemCount),
+            CustomersAffected = dcount(tostring(Properties["minibank.userId"]))
+| where FailedValueIdr >= 100000000

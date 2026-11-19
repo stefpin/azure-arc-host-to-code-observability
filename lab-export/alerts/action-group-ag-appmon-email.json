@@ -1,0 +1,31 @@
+{
+  "armRoleReceivers": [],
+  "automationRunbookReceivers": [],
+  "azureAppPushReceivers": [],
+  "azureFunctionReceivers": [],
+  "emailReceivers": [
+    {
+      "emailAddress": "alerts@example.com",
+      "name": "the lab owner-email",
+      "status": "Enabled",
+      "useCommonAlertSchema": true
+    }
+  ],
+  "enabled": true,
+  "eventHubReceivers": [],
+  "groupShortName": "appmon",
+  "itsmReceivers": [],
+  "location": "Global",
+  "logicAppReceivers": [],
+  "name": "ag-appmon-email",
+  "resourceGroup": "rg-appmon-openshift-demo",
+  "smsReceivers": [],
+  "tags": {
+    "demo": "minibank",
+    "owner": "labadmin",
+    "purpose": "appmon-openshift-demo"
+  },
+  "type": "Microsoft.Insights/ActionGroups",
+  "voiceReceivers": [],
+  "webhookReceivers": []
+}

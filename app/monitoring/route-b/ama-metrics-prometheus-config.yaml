@@ -1,0 +1,21 @@
+# Azure Monitor managed Prometheus (ama-metrics) on ocp-minibank: scrape the two exporters on APP-RHEL every 30 s.
+# Apply: oc apply -f monitoring/route-b/ama-metrics-prometheus-config.yaml
+# APP-RHEL must allow TCP 9161 and 9187 from the OpenShift nodes 192.168.110.21-24.
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: ama-metrics-prometheus-config
+  namespace: kube-system
+data:
+  prometheus-config: |-
+    global:
+      scrape_interval: 30s
+    scrape_configs:
+      - job_name: minibank-oracle
+        scrape_interval: 30s
+        static_configs:
+          - targets: ['192.168.110.32:9161']
+      - job_name: minibank-postgres
+        scrape_interval: 30s
+        static_configs:
+          - targets: ['192.168.110.32:9187']

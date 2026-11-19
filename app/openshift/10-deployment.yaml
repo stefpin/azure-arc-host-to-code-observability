@@ -1,0 +1,93 @@
+# minibank-transfer on OpenShift (project minibank). Replace ACR_NAME with your registry name before: oc apply -f openshift/
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minibank-transfer
+  namespace: minibank
+  labels:
+    app: minibank-transfer
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: minibank-transfer
+  template:
+    metadata:
+      labels:
+        app: minibank-transfer
+    spec:
+      imagePullSecrets:
+        - name: acr-pull                      # docker-registry secret for ACR_NAME.azurecr.io
+      # spread the 3 pods over different nodes (best effort)
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: minibank-transfer
+      # move pods away from a failed node after 60 s (default is 300 s)
+      tolerations:
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 60
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 60
+      containers:
+        - name: minibank-transfer
+          image: ACR_NAME.azurecr.io/minibank-transfer:1.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: ORACLE_URL
+              value: jdbc:oracle:thin:@//192.168.110.32:1521/FREEPDB1
+            - name: ORACLE_USER
+              value: MINIBANK
+            - name: ORACLE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minibank-transfer-secrets
+                  key: ORACLE_PASSWORD
+            - name: FRAUD_URL
+              value: http://192.168.110.32:8082
+            - name: APPLICATIONINSIGHTS_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: minibank-transfer-secrets
+                  key: APPLICATIONINSIGHTS_CONNECTION_STRING
+            - name: APPLICATIONINSIGHTS_ROLE_NAME
+              value: minibank-transfer
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 90
+            periodSeconds: 15
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi
+          securityContext:                    # fits the restricted-v2 SCC (random UID)
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault

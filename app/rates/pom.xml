@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- minibank-rates: Java 21, Spring Boot 3.5.x, Maven. Fee and limit check in the payment path (Priority 1 feature B).
+     NO monitoring agent and NO monitoring code: the Red Hat build of OpenTelemetry operator injects the agent at deploy time. -->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.5.6</version>
+    <relativePath/>
+  </parent>
+  <groupId>id.minibank</groupId>
+  <artifactId>minibank-rates</artifactId>
+  <version>1.0.0</version>
+  <name>minibank-rates</name>
+  <description>MiniBank fee and limit check (demo only, synthetic data)</description>
+  <properties>
+    <java.version>21</java.version>
+  </properties>
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+  </dependencies>
+  <build>
+    <finalName>minibank-rates</finalName>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+</project>

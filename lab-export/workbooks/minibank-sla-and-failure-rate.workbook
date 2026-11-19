@@ -1,0 +1,581 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "![the bank](https://pustaka.example.com/public-assets/logo.svg) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; **Powered by Azure Arc and Azure Monitor** &nbsp;&nbsp; ![Microsoft](https://aadcdn.msftauth.net/shared/1.0/content/images/microsoft_logo_564db913a7fa0ca42727161c6d031bef.svg)"
+      },
+      "name": "brand-header"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## MiniBank – SLA and Failure Rate\nDemo application with synthetic data, Application Insights **appi-minibank**. SLA target: 99.9 % of business requests on minibank-api (Transfer, QRIS, Statement, Login) without a technical failure (HTTP 5xx) and P95 below 1,000 ms. Business declines such as Insufficient balance (HTTP 409) are shown separately: they are correct answers of the bank, not failures, and do not use the error budget."
+      },
+      "name": "title"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "febd3abf-2bf5-5c0c-a025-1824f3ea82bb",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "label": "Time range",
+            "type": 4,
+            "isRequired": true,
+            "value": {
+              "durationMs": 86400000
+            },
+            "typeSettings": {
+              "selectableValues": [
+                {
+                  "durationMs": 900000
+                },
+                {
+                  "durationMs": 3600000
+                },
+                {
+                  "durationMs": 14400000
+                },
+                {
+                  "durationMs": 43200000
+                },
+                {
+                  "durationMs": 86400000
+                },
+                {
+                  "durationMs": 604800000
+                }
+              ],
+              "allowCustom": true
+            }
+          },
+          {
+            "id": "ba35e0db-3be1-554f-a5b2-58da5238af32",
+            "version": "KqlParameterItem/1.0",
+            "name": "AppInsights",
+            "label": "Application Insights",
+            "type": 5,
+            "isRequired": true,
+            "query": "resources\n| where type =~ 'microsoft.insights/components'\n| where name =~ 'appi-minibank'\n| project id",
+            "crossComponentResources": [
+              "value::all"
+            ],
+            "value": "value::1",
+            "typeSettings": {
+              "resourceTypeFilter": {
+                "microsoft.insights/components": true
+              },
+              "additionalResourceOptions": [
+                "value::1"
+              ],
+              "showDefault": false
+            },
+            "queryType": 1,
+            "resourceType": "microsoft.resourcegraph/resources"
+          }
+        ],
+        "style": "pills",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let biz = requests\n| where cloud_RoleName == \"minibank-api\" and name !has \"health\" and name has \"/api/\"\n| summarize Total = sum(itemCount), Failed = sumif(itemCount, toint(resultCode) >= 500), Declines = sumif(itemCount, resultCode == \"409\"), P95 = percentile(duration, 95);\nlet avail = availabilityResults\n| summarize Runs = sum(itemCount), Passed = sumif(itemCount, tostring(success) =~ \"true\");\nunion\n (avail | project Order = 1, Metric = \"Availability % (internal probe)\", Value = round(100.0 * Passed / Runs, 2)),\n (biz | project Order = 2, Metric = \"Technical failure rate % (5xx)\", Value = round(100.0 * Failed / Total, 2)),\n (biz | project Order = 3, Metric = \"Business declines (Insufficient balance)\", Value = todouble(Declines)),\n (biz | project Order = 4, Metric = \"Success % (SLA 99.9, excl. business declines)\", Value = round(100.0 * (Total - Failed) / Total, 3)),\n (biz | project Order = 5, Metric = \"P95 latency ms (SLA target 1000)\", Value = round(P95, 0))\n| order by Order asc\n| project Metric, Value",
+        "size": 4,
+        "title": "SLA tiles",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "crossComponentResources": [
+          "{AppInsights}"
+        ],
+        "visualization": "tiles",
+        "tileSettings": {
+          "titleContent": {
+            "columnMatch": "Metric",
+            "formatter": 1
+          },
+          "leftContent": {
+            "columnMatch": "Value",
+            "formatter": 12,
+            "formatOptions": {
+              "palette": "blue"
+            },
+            "numberFormat": {
+              "unit": 0,
+              "options": {
+                "maximumFractionDigits": 3
+              }
+            }
+          },
+          "showBorder": true
+        }
+      },
+      "customWidth": "100",
+      "name": "kpi-tiles"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\n| where cloud_RoleName == \"minibank-api\"\n| extend Transaction = case(name endswith \"/api/transfer\", \"Transfer\", name endswith \"/api/qris/pay\", \"QRIS\", name endswith \"/statement\", \"Statement\", name endswith \"/api/login\", \"Login\", \"\")\n| where Transaction != \"\"\n| summarize Requests = sum(itemCount), TechnicalFailedPct = round(100.0 * sumif(itemCount, toint(resultCode) >= 500) / sum(itemCount), 2), Declines = sumif(itemCount, resultCode == \"409\"),\n  P50Ms = round(percentile(duration, 50), 0), P95Ms = round(percentile(duration, 95), 0) by Transaction\n| extend SlaMet = P95Ms <= 1000 and TechnicalFailedPct <= 0.1\n| order by Transaction asc",
+        "size": 0,
+        "title": "P95 latency, technical failures and declines per business transaction",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "crossComponentResources": [
+          "{AppInsights}"
+        ],
+        "visualization": "table"
+      },
+      "customWidth": "50",
+      "name": "p95-per-transaction"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\n| where cloud_RoleName == \"minibank-api\"\n| extend Transaction = case(name endswith \"/api/transfer\", \"Transfer\", name endswith \"/api/qris/pay\", \"QRIS\", name endswith \"/statement\", \"Statement\", name endswith \"/api/login\", \"Login\", \"\")\n| where Transaction != \"\"\n| summarize P95Ms = percentile(duration, 95) by Transaction, bin(timestamp, 5m)\n| render timechart",
+        "size": 0,
+        "title": "P95 latency (ms) per business transaction",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "crossComponentResources": [
+          "{AppInsights}"
+        ],
+        "visualization": "timechart"
+      },
+      "customWidth": "50",
+      "name": "p95-chart"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\n| where cloud_RoleName startswith \"minibank-\" and name !has \"health\"\n| summarize Total = sum(itemCount), Failed = sumif(itemCount, toint(resultCode) >= 500) by cloud_RoleName, bin(timestamp, 5m)\n| project timestamp, cloud_RoleName, FailureRatePct = round(100.0 * Failed / Total, 2)\n| render timechart",
+        "size": 0,
+        "title": "Technical failure rate % by cloud role (5xx)",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "crossComponentResources": [
+          "{AppInsights}"
+        ],
+        "visualization": "timechart"
+      },
+      "customWidth": "50",
+      "name": "failure-rate-by-role"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "union\n (requests | where toint(resultCode) >= 500 | summarize Count = sum(itemCount) by cloud_RoleName, Kind = \"Failed requests (5xx)\"),\n (exceptions | summarize Count = sum(itemCount) by cloud_RoleName, Kind = \"Exceptions\")\n| where cloud_RoleName startswith \"minibank-\"\n| order by cloud_RoleName asc, Kind asc",
+        "size": 0,
+        "title": "Technical failures by cloud role",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "crossComponentResources": [
+          "{AppInsights}"
+        ],
+        "visualization": "table"
+      },
+      "customWidth": "50",
+      "name": "failures-by-role"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\n| where cloud_RoleName == \"minibank-api\" and name !has \"health\" and name has \"/api/\"\n| summarize ['Business declines (409)'] = sumif(itemCount, resultCode == \"409\"), ['Technical failures (5xx)'] = sumif(itemCount, toint(resultCode) >= 500) by bin(timestamp, 15m)\n| render timechart",
+        "size": 0,
+        "title": "Business declines (409) vs technical failures (5xx), per 15 minutes",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "crossComponentResources": [
+          "{AppInsights}"
+        ],
+        "visualization": "timechart"
+      },
+      "customWidth": "50",
+      "name": "declines-per-15min"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\n| where cloud_RoleName == \"minibank-api\" and resultCode == \"409\"\n| project timestamp, Transaction = case(name endswith \"/api/transfer\", \"Transfer\", name endswith \"/api/qris/pay\", \"QRIS\", name), Result = \"Insufficient balance (409)\", DurationMs = round(duration, 0), TraceId = operation_Id\n| top 20 by timestamp desc",
+        "size": 0,
+        "title": "Latest business declines (Insufficient balance) with trace ID",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "crossComponentResources": [
+          "{AppInsights}"
+        ],
+        "visualization": "table"
+      },
+      "customWidth": "50",
+      "name": "latest-declines"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "dependencies\n| where tostring(success) =~ \"false\" and cloud_RoleName startswith \"minibank-\"\n| summarize Failed = sum(itemCount) by cloud_RoleName, type, target, name, resultCode\n| top 10 by Failed desc",
+        "size": 0,
+        "title": "Top failed dependencies",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "crossComponentResources": [
+          "{AppInsights}"
+        ],
+        "visualization": "table"
+      },
+      "customWidth": "50",
+      "name": "top-failed-dependencies"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "availabilityResults\n| summarize AvailabilityPct = round(100.0 * countif(tostring(success) =~ \"true\") / count(), 2) by name, bin(timestamp, 15m)\n| render timechart",
+        "size": 0,
+        "title": "Availability % (internal probe)",
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "crossComponentResources": [
+          "{AppInsights}"
+        ],
+        "visualization": "timechart"
+      },
+      "customWidth": "50",
+      "name": "availability"
+    },
+    {
+      "type": 12,
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "title": "Business impact (IDR)",
+        "items": [
+          {
+            "type": 1,
+            "content": {
+              "json": "### Business impact (IDR)\nFailed payments = Transfer and QRIS requests on minibank-api that ended with a technical failure (HTTP 5xx); business declines (409) are not counted. Amount, tier, User ID, amount band and traffic source are request tags set by minibank-api v1.4 before it calls minibank-transfer (customDimensions minibank.amountIdr, minibank.tier, minibank.userId, minibank.amountBand, minibank.trafficSource; in Log Analytics AppRequests.Properties, values as strings). Traffic source: people = real persons on the web page, robot = browser robot, traffic = traffic generator, probe = availability probe. Alert alr-minibank-failed-value-idr fires at IDR 100,000,000 within 10 minutes. The last-10-minute tile needs a time range of 15 minutes or more."
+            },
+            "name": "business-impact-text"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let failed = requests\n| where cloud_RoleName == \"minibank-api\" and (name endswith \"/api/transfer\" or name endswith \"/api/qris/pay\") and toint(resultCode) >= 500\n| extend AmountIdr = todouble(customDimensions[\"minibank.amountIdr\"]), UserId = tostring(customDimensions[\"minibank.userId\"]);\nunion\n (failed | summarize Value = sum(AmountIdr * itemCount) | project Order = 1, Metric = \"Failed payment value IDR (5xx, time range)\", Value),\n (failed | where timestamp > ago(10m) | summarize Value = sum(AmountIdr * itemCount) | project Order = 2, Metric = \"Failed payment value IDR (5xx, last 10 min; alert at 100,000,000)\", Value),\n (failed | where isnotempty(UserId) | summarize Value = todouble(dcount(UserId)) | project Order = 3, Metric = \"Customers affected (User IDs with a failed payment)\", Value),\n (failed | summarize Value = todouble(sum(itemCount)) | project Order = 4, Metric = \"Failed payments (5xx)\", Value)\n| extend Value = coalesce(Value, 0.0)\n| order by Order asc\n| project Metric, Value",
+              "size": 4,
+              "title": "Failed payments in IDR (technical failures only)",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "crossComponentResources": [
+                "{AppInsights}"
+              ],
+              "visualization": "tiles",
+              "tileSettings": {
+                "titleContent": {
+                  "columnMatch": "Metric",
+                  "formatter": 1
+                },
+                "leftContent": {
+                  "columnMatch": "Value",
+                  "formatter": 12,
+                  "formatOptions": {
+                    "palette": "blue"
+                  },
+                  "numberFormat": {
+                    "unit": 0,
+                    "options": {
+                      "style": "decimal",
+                      "useGrouping": true,
+                      "maximumFractionDigits": 0
+                    }
+                  }
+                },
+                "showBorder": true
+              }
+            },
+            "customWidth": "100",
+            "name": "business-impact-tiles"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "requests\n| where cloud_RoleName == \"minibank-api\" and (name endswith \"/api/transfer\" or name endswith \"/api/qris/pay\") and toint(resultCode) >= 500\n| extend AmountIdr = todouble(customDimensions[\"minibank.amountIdr\"]), UserId = tostring(customDimensions[\"minibank.userId\"]), TierTag = tostring(customDimensions[\"minibank.tier\"])\n| summarize FailedValueIdr = sum(AmountIdr * itemCount), FailedPayments = sum(itemCount), CustomersAffected = dcountif(UserId, isnotempty(UserId)) by Tier = iff(isempty(TierTag), \"(unknown)\", TierTag)\n| extend Order = case(Tier == \"Solitaire\", 1, Tier == \"Prioritas\", 2, Tier == \"Reguler\", 3, 4)\n| order by Order asc\n| project Tier, FailedValueIdr, FailedPayments, CustomersAffected",
+              "size": 0,
+              "title": "Failed payment value by tier",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "crossComponentResources": [
+                "{AppInsights}"
+              ],
+              "visualization": "table"
+            },
+            "customWidth": "33",
+            "name": "business-impact-by-tier"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "requests\n| where cloud_RoleName == \"minibank-api\" and (name endswith \"/api/transfer\" or name endswith \"/api/qris/pay\") and toint(resultCode) >= 500\n| extend AmountIdr = todouble(customDimensions[\"minibank.amountIdr\"]), UserId = tostring(customDimensions[\"minibank.userId\"]), BandTag = tostring(customDimensions[\"minibank.amountBand\"])\n| summarize FailedValueIdr = sum(AmountIdr * itemCount), FailedPayments = sum(itemCount), CustomersAffected = dcountif(UserId, isnotempty(UserId)) by AmountBand = iff(isempty(BandTag), \"(unknown)\", BandTag)\n| extend Order = case(AmountBand == \">=100M\", 1, AmountBand == \"10-100M\", 2, AmountBand == \"1-10M\", 3, AmountBand == \"<1M\", 4, 5)\n| order by Order asc\n| project AmountBand, FailedValueIdr, FailedPayments, CustomersAffected",
+              "size": 0,
+              "title": "Failed payment value by amount band",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "crossComponentResources": [
+                "{AppInsights}"
+              ],
+              "visualization": "table"
+            },
+            "customWidth": "33",
+            "name": "business-impact-by-band"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "requests\n| where cloud_RoleName == \"minibank-api\" and (name endswith \"/api/transfer\" or name endswith \"/api/qris/pay\") and toint(resultCode) >= 500\n| extend AmountIdr = todouble(customDimensions[\"minibank.amountIdr\"]), UserId = tostring(customDimensions[\"minibank.userId\"]), SourceTag = tostring(customDimensions[\"minibank.trafficSource\"])\n| summarize FailedValueIdr = sum(AmountIdr * itemCount), FailedPayments = sum(itemCount), CustomersAffected = dcountif(UserId, isnotempty(UserId)) by TrafficSource = iff(isempty(SourceTag), \"(none)\", SourceTag)\n| extend Order = case(TrafficSource == \"people\", 1, TrafficSource == \"robot\", 2, TrafficSource == \"traffic\", 3, TrafficSource == \"probe\", 4, TrafficSource == \"unknown\", 5, 6)\n| order by Order asc\n| project TrafficSource, FailedValueIdr, FailedPayments, CustomersAffected",
+              "size": 0,
+              "title": "Failed payment value by traffic source",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "crossComponentResources": [
+                "{AppInsights}"
+              ],
+              "visualization": "table"
+            },
+            "customWidth": "33",
+            "name": "business-impact-by-source"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "requests\n| where cloud_RoleName == \"minibank-api\" and (name endswith \"/api/transfer\" or name endswith \"/api/qris/pay\") and toint(resultCode) >= 500\n| extend AmountIdr = todouble(customDimensions[\"minibank.amountIdr\"]), TierTag = tostring(customDimensions[\"minibank.tier\"])\n| summarize FailedValueIdr = sum(AmountIdr * itemCount) by Tier = iff(isempty(TierTag), \"(unknown)\", TierTag), bin(timestamp, 5m)\n| render timechart",
+              "size": 0,
+              "title": "Failed payment value IDR per 5 minutes by tier",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "crossComponentResources": [
+                "{AppInsights}"
+              ],
+              "visualization": "timechart"
+            },
+            "customWidth": "50",
+            "name": "business-impact-chart"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "requests\n| where cloud_RoleName == \"minibank-api\" and (name endswith \"/api/transfer\" or name endswith \"/api/qris/pay\") and toint(resultCode) >= 500\n| project timestamp, UserId = tostring(customDimensions[\"minibank.userId\"]), Tier = tostring(customDimensions[\"minibank.tier\"]),\n          Channel = tostring(customDimensions[\"minibank.channel\"]), AmountIdr = todouble(customDimensions[\"minibank.amountIdr\"]),\n          AmountBand = tostring(customDimensions[\"minibank.amountBand\"]), TrafficSource = tostring(customDimensions[\"minibank.trafficSource\"]),\n          ResultCode = resultCode, TraceId = operation_Id\n| top 20 by timestamp desc",
+              "size": 0,
+              "title": "Latest failed payments with User ID, tier, amount and trace ID",
+              "timeContextFromParameter": "TimeRange",
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "crossComponentResources": [
+                "{AppInsights}"
+              ],
+              "visualization": "table"
+            },
+            "customWidth": "50",
+            "name": "business-impact-latest"
+          }
+        ]
+      },
+      "name": "business-impact-idr"
+    },
+    {
+      "type": 12,
+      "name": "cross-layer-root-cause",
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "title": "Root cause across all layers (cross-layer lab)",
+        "items": [
+          {
+            "type": 1,
+            "name": "rootcause-text",
+            "content": {
+              "json": "### Root cause across all layers (cross-layer lab)\nOne rule-based verdict for the whole stack, computed by the KQL function **MiniBankRootCause()** in law-appmon over the last 6 minutes. It first checks whether customers are impacted (failed or slow business transactions, failed robot journeys), then looks for the layer that explains it, in this order: database schema change, OpenShift containers killed, network path OpenShift to APP-RHEL slow or lossy, VM CPU or memory pressure (APP-WIN, APP-SQL, APP-RHEL), database time, new exception type. Healthy = no impact and no layer signal; Pending = customers are impacted and the board is still waiting (about 2 minutes) for the slower VM, OpenShift, network and schema data before it names a layer, so an application symptom is never blamed for a lower-layer cause; Unclassified = impact without a matching rule (open Investigate on the alert). The same verdict is on the Grafana board *MiniBank - Cross-layer root cause*; the observer on HV-HOST-02 records it every minute (MiniBankVerdict_CL). Mystery-mode answers (MiniBankMystery_CL) are written only after the reveal and are never read by the verdict."
+            }
+          },
+          {
+            "type": 9,
+            "name": "recovering-param",
+            "content": {
+              "version": "KqlParameterItem/1.0",
+              "crossComponentResources": [
+                "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+              ],
+              "parameters": [
+                {
+                  "id": "7de42a75-4928-52c0-8903-efc8984b0fbe",
+                  "version": "KqlParameterItem/1.0",
+                  "name": "RecoveringBanner",
+                  "label": "Recovery banner",
+                  "type": 1,
+                  "query": "MiniBankRecovering()\n| project Banner",
+                  "isHiddenWhenLocked": true,
+                  "queryType": 0,
+                  "resourceType": "microsoft.operationalinsights/workspaces",
+                  "crossComponentResources": [
+                    "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+                  ]
+                }
+              ],
+              "style": "pills",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces"
+            }
+          },
+          {
+            "type": 1,
+            "name": "recovering-banner",
+            "content": {
+              "json": "**{RecoveringBanner}**\n\nDisplay only: the verdict below is still the live reading. For 10 minutes after an answer, leftover errors or slow calls in the 6-minute window can make the live reading flicker (Pending, Unclassified, Warning or the same layer again).",
+              "style": "info"
+            },
+            "conditionalVisibility": {
+              "parameterName": "RecoveringBanner",
+              "comparison": "isNotEqualTo",
+              "value": "none"
+            }
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "MiniBankRootCause()\n| extend OnsetWIB = format_datetime(Onset + 7h, 'HH:mm:ss')\n| project Status, Layer, Component, Evidence, OnsetWIB, Impact, Confidence, Rule",
+              "size": 0,
+              "title": "Verdict now",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+              ],
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "Status",
+                    "formatter": 18,
+                    "formatOptions": {
+                      "thresholdsOptions": "colors",
+                      "thresholdsGrid": [
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Healthy",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Warning",
+                          "representation": "yellow",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Pending",
+                          "representation": "blue",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Unclassified",
+                          "representation": "orange",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "RootCause",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "Default",
+                          "thresholdValue": null,
+                          "representation": null,
+                          "text": "{0}{1}"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            "name": "rootcause-now"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "MiniBankVerdict_CL\n| order by TimeGenerated asc\n| extend Verdict = case(Status == 'Healthy', 'Healthy', Status == 'Pending', 'Pending: checking all layers', strcat(Status, ': ', Layer))\n| extend Previous = prev(Verdict)\n| where Verdict != Previous\n| project TimeWIB = format_datetime(TimeGenerated + 7h, 'yyyy-MM-dd HH:mm'), Verdict, Component, Evidence\n| order by TimeWIB desc\n| take 50",
+              "size": 0,
+              "title": "Verdict changes in the time range (WIB)",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+              ],
+              "visualization": "table",
+              "timeContextFromParameter": "TimeRange"
+            },
+            "name": "rootcause-history"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "// Scorecard, approved grading (15 Nov 2026 22:35 WIB) - the same rules as the test grader:\n// customers count as affected when two readings in a row show customer impact.\n// Affected: the first confirmed answer (two red readings in a row on one layer, or two host warnings in a row) must name the\n//   expected layer within 5 min of the start, or within 2.5 min of customers being affected if that came later.\n// Not affected: that confirmed answer, or else the first layer shown twice in a row (yellow or red), must be the expected layer\n//   within 5 min. Healthy slot: a confirmed answer from minute 4 to 3 min after the end is a false alarm.\nlet runs = MiniBankMystery_CL\n| where TimeGenerated > ago(30d) and Result in ('revealed', 'series', 'labelled', 'void')\n| summarize arg_max(TimeGenerated, *) by RunId, Slot\n| extend Start = todatetime(StartUtc), End = todatetime(EndUtc);\nlet rd = MiniBankVerdict_CL | where TimeGenerated > ago(30d)\n| project VT = TimeGenerated, VStatus = Status, VLayer = Layer | order by VT asc\n| extend PrevLayer = prev(VLayer), PrevStatus = prev(VStatus), PrevT = prev(VT)\n| extend Imp = VStatus in ('Pending', 'RootCause', 'Unclassified'), PrevImp = PrevStatus in ('Pending', 'RootCause', 'Unclassified')\n| extend RedPair = VStatus in ('RootCause', 'Unclassified') and PrevStatus in ('RootCause', 'Unclassified') and PrevLayer == VLayer,\n         HostPair = VLayer == 'Host' and PrevLayer == 'Host' and VStatus in ('Warning', 'RootCause') and PrevStatus in ('Warning', 'RootCause'),\n         ShownPair = VStatus in ('Warning', 'RootCause') and PrevStatus in ('Warning', 'RootCause') and PrevLayer == VLayer\n                     and VLayer !in ('', 'Healthy', 'Pending', 'No layer at fault', 'Unclassified'),\n         ImpPair = Imp and PrevImp\n| extend Key = bin(VT, 1m);\nlet win = runs | where Result != 'void'\n| extend WStart = iff(ExpectedLayer == 'Healthy', Start + 4m, Start), WEnd = End + 3m\n| mv-expand Key = range(bin(WStart, 1m), bin(WEnd, 1m), 1m) to typeof(datetime)\n| project RunId, Slot, Start, WStart, WEnd, Key;\nlet w = rd | join kind=inner win on Key | where VT between (WStart .. WEnd);\nlet st = w | summarize AffT = minif(iff(PrevT < Start, Start, PrevT), ImpPair) by RunId, Slot;\nlet conf = w | where RedPair or HostPair | summarize arg_min(VT, VLayer, VStatus) by RunId, Slot | project RunId, Slot, OT = VT, OLayer = VLayer, OStatus = VStatus;\nlet shown = w | where ShownPair | summarize arg_min(VT, VLayer, VStatus) by RunId, Slot | project RunId, Slot, YT = VT, YLayer = VLayer, YStatus = VStatus;\nruns\n| join kind=leftouter st on RunId, Slot | join kind=leftouter conf on RunId, Slot | join kind=leftouter shown on RunId, Slot\n| extend Affected = isnotnull(AffT)\n| extend UseYel = isnull(OT) and not(Affected) and isnotnull(YT)\n| extend AT = iff(isnotnull(OT), OT, iff(UseYel, YT, datetime(null))), ALayer = iff(isnotnull(OT), OLayer, iff(UseYel, YLayer, '')),\n         AStatus = iff(isnotnull(OT), OStatus, iff(UseYel, YStatus, ''))\n| extend MinutesToVerdict = iff(isnull(AT), real(null), round((AT - Start) / 1m, 1)), ImpMin = iff(Affected, round((AffT - Start) / 1m, 1), real(null))\n| extend DueMin = iff(Affected, max_of(5.0, ImpMin + 2.5), 5.0)\n| extend AnswerType = case(isnull(AT), '', AStatus == 'Warning', 'Warning (yellow)', AStatus == 'RootCause', 'Root cause (red)', AStatus)\n| extend Customers = case(Result == 'void' or ExpectedLayer == 'Healthy', '', Affected, strcat('affected from ', tostring(ImpMin), ' min'), 'not affected')\n| extend Verdict = case(Result == 'void', 'VOID (fault did not start)',\n                        ExpectedLayer == 'Healthy' and isnull(OT), 'OK: no false alarm',\n                        ExpectedLayer == 'Healthy', strcat('FALSE ALARM: ', OLayer),\n                        isnull(AT) and Affected, 'NO VERDICT - customers affected, no confirmed answer',\n                        isnull(AT), 'NO VERDICT - no layer shown twice in a row',\n                        ALayer != ExpectedLayer, strcat('WRONG LAYER: ', ALayer),\n                        MinutesToVerdict > DueMin, 'RIGHT LAYER (late)',\n                        UseYel, 'RIGHT LAYER - early warning, customers not affected',\n                        AStatus == 'Warning', 'RIGHT LAYER - early warning',\n                        'RIGHT LAYER')\n| project StartWIB = format_datetime(Start + 7h, 'yyyy-MM-dd HH:mm'), RunId, Mode, Slot, Number, Card, ExpectedLayer, BoardLayer = ALayer, AnswerType, MinutesToVerdict, Customers, Verdict\n| order by StartWIB desc, Slot asc\n",
+              "size": 0,
+              "title": "Mystery mode scorecard (after the reveal)",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+              ],
+              "visualization": "table"
+            },
+            "name": "rootcause-scorecard"
+          }
+        ]
+      }
+    }
+  ],
+  "fallbackResourceIds": [
+    "Azure Monitor"
+  ],
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

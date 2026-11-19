@@ -1,0 +1,45 @@
+{
+  "dataFlows": [
+    {
+      "destinations": [
+        "law"
+      ],
+      "outputStream": "Microsoft-W3CIISLog",
+      "streams": [
+        "Microsoft-W3CIISLog"
+      ],
+      "transformKql": "source | where csUriStem !~ '/api/health'"
+    }
+  ],
+  "dataSources": {
+    "iisLogs": [
+      {
+        "name": "iisLogsDataSource",
+        "streams": [
+          "Microsoft-W3CIISLog"
+        ]
+      }
+    ]
+  },
+  "description": "MiniBank IIS logs from APP-WIN without health checks",
+  "destinations": {
+    "logAnalytics": [
+      {
+        "name": "law",
+        "workspaceId": "<WORKSPACE_ID>",
+        "workspaceResourceId": "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+      }
+    ]
+  },
+  "immutableId": "dcr-<IMMUTABLE_ID>",
+  "kind": "Windows",
+  "location": "indonesiacentral",
+  "name": "dcr-minibank-iis",
+  "resourceGroup": "rg-appmon-openshift-demo",
+  "tags": {
+    "demo": "minibank",
+    "owner": "labadmin",
+    "purpose": "appmon-openshift-demo"
+  },
+  "type": "Microsoft.Insights/dataCollectionRules"
+}

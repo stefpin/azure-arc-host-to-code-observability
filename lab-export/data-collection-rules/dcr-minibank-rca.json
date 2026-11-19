@@ -1,0 +1,146 @@
+{
+  "dataFlows": [
+    {
+      "destinations": [
+        "law"
+      ],
+      "outputStream": "Custom-MiniBankVerdict_CL",
+      "streams": [
+        "Custom-MiniBankVerdict"
+      ],
+      "transformKql": "source"
+    },
+    {
+      "destinations": [
+        "law"
+      ],
+      "outputStream": "Custom-MiniBankMystery_CL",
+      "streams": [
+        "Custom-MiniBankMystery"
+      ],
+      "transformKql": "source"
+    }
+  ],
+  "description": "MiniBank cross-layer lab: verdict history (observer on HV-HOST-02) and mystery-mode answers/scorecard",
+  "destinations": {
+    "logAnalytics": [
+      {
+        "name": "law",
+        "workspaceId": "<WORKSPACE_ID>",
+        "workspaceResourceId": "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+      }
+    ]
+  },
+  "endpoints": {
+    "logsIngestion": "https://dcr-minibank-rca-jnvj-indonesiacentral.logs.z1.ingest.monitor.azure.com",
+    "metricsIngestion": "https://dcr-minibank-rca-7xvt-indonesiacentral.metrics.z1.ingest.monitor.azure.com"
+  },
+  "immutableId": "dcr-<IMMUTABLE_ID>",
+  "kind": "Direct",
+  "location": "indonesiacentral",
+  "name": "dcr-minibank-rca",
+  "resourceGroup": "rg-appmon-openshift-demo",
+  "streamDeclarations": {
+    "Custom-MiniBankMystery": {
+      "columns": [
+        {
+          "name": "TimeGenerated",
+          "type": "datetime"
+        },
+        {
+          "name": "RunId",
+          "type": "string"
+        },
+        {
+          "name": "Mode",
+          "type": "string"
+        },
+        {
+          "name": "Slot",
+          "type": "int"
+        },
+        {
+          "name": "Number",
+          "type": "int"
+        },
+        {
+          "name": "Card",
+          "type": "string"
+        },
+        {
+          "name": "ExpectedLayer",
+          "type": "string"
+        },
+        {
+          "name": "StartUtc",
+          "type": "datetime"
+        },
+        {
+          "name": "EndUtc",
+          "type": "datetime"
+        },
+        {
+          "name": "Fingerprint",
+          "type": "string"
+        },
+        {
+          "name": "Result",
+          "type": "string"
+        },
+        {
+          "name": "Note",
+          "type": "string"
+        }
+      ]
+    },
+    "Custom-MiniBankVerdict": {
+      "columns": [
+        {
+          "name": "TimeGenerated",
+          "type": "datetime"
+        },
+        {
+          "name": "Status",
+          "type": "string"
+        },
+        {
+          "name": "Layer",
+          "type": "string"
+        },
+        {
+          "name": "Component",
+          "type": "string"
+        },
+        {
+          "name": "Evidence",
+          "type": "string"
+        },
+        {
+          "name": "Onset",
+          "type": "datetime"
+        },
+        {
+          "name": "Impact",
+          "type": "string"
+        },
+        {
+          "name": "Confidence",
+          "type": "string"
+        },
+        {
+          "name": "Rule",
+          "type": "string"
+        },
+        {
+          "name": "Observer",
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "tags": {
+    "Project": "MiniBank-demo",
+    "Purpose": "cross-layer-root-cause"
+  },
+  "type": "Microsoft.Insights/dataCollectionRules"
+}

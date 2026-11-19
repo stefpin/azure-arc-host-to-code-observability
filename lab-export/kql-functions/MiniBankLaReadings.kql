@@ -1,0 +1,47 @@
+// MiniBankLaReadings  (category: MiniBank Look-ahead; parameters: lookback:timespan=7d)
+// MiniBankLaReadings(lookback:timespan=7d) - Look-ahead v1.1: capacity readings per hour (per WIB day for the Log Analytics
+// volume) from the existing monitoring data plus the Look-ahead collector on HV-HOST-02 (MiniBankLookahead_CL), and (v1.1, 17 Nov
+// 2026) the speed of the business transactions: P95 per complete hour, limit 1000 ms, warning 800 ms (agreed 17 Nov 2026).
+// History starts no earlier than 13 Nov 2026 14:00 WIB (end of the build period). Drill minutes are left out where a drill
+// changes the reading. Limit = upper limit (higher is worse); Low = lower limit (lower is worse); High = watch level: for Low
+// rows the level at or below which it is Watch; for Limit rows a warning level below the limit (Watch when reached within 30 days).
+let st = max_of(now() - lookback, datetime(2026-11-13T07:00:00Z));
+let dm = MiniBankDrillMinutes(st);
+let hostCpu = Perf
+| where TimeGenerated > st and Computer startswith 'HV-HOST-02' and ObjectName == 'Hyper-V Hypervisor Logical Processor' and CounterName == '% Total Run Time' and InstanceName == '_Total'
+| extend T = bin(TimeGenerated, 1m)
+| join kind=leftanti dm on T
+| summarize Value = percentile(CounterValue, 95) by TimeGenerated = bin(TimeGenerated, 1h)
+| extend Area = 'Host', Resource = 'HV-HOST-02', Item = 'CPU busy (P95 per hour)', Unit = '%', Limit = 85.0, Low = real(null), High = real(null), Src = 'Perf, drills left out';
+let nodeDisk = InsightsMetrics
+| where TimeGenerated > st and Namespace == 'container.azm.ms/disk' and Name == 'used_percent'
+| extend Path = tostring(parse_json(Tags).path)
+| where Path in ('/', '/sysroot', '/var')
+| summarize Value = max(Val) by TimeGenerated = bin(TimeGenerated, 1h), Resource = Computer
+| extend Area = 'OpenShift', Item = 'Node disk used', Unit = '%', Limit = 85.0, Low = real(null), High = real(null), Src = 'Container insights';
+let podMem = Perf
+| where TimeGenerated > st and ObjectName == 'K8SContainer' and CounterName in ('memoryWorkingSetBytes', 'memoryLimitBytes') and InstanceName endswith '/minibank-transfer'
+| extend T = bin(TimeGenerated, 1m)
+| join kind=leftanti dm on T
+| summarize Value = maxif(CounterValue, CounterName == 'memoryWorkingSetBytes') / 1048576.0, Lim = maxif(CounterValue, CounterName == 'memoryLimitBytes') / 1048576.0 by TimeGenerated = bin(TimeGenerated, 1h)
+| where Value > 0
+| extend Area = 'OpenShift', Resource = 'minibank-transfer', Item = 'Memory used, busiest pod', Unit = 'MB', Limit = iff(Lim > 0 and Lim < 65536.0, Lim, 768.0), Low = real(null), High = real(null), Src = 'Container insights, drills left out'
+| project-away Lim;
+let laDay = Usage
+| where TimeGenerated >= startofday(st + 7h) + 1d - 7h and IsBillable == true
+| summarize Value = sum(Quantity) / 1024.0 by TimeGenerated = bin(TimeGenerated + 7h, 1d) - 7h
+| where TimeGenerated + 1d <= now()
+| extend Area = 'Monitoring', Resource = 'law-appmon', Item = 'Data into Log Analytics per day', Unit = 'GB', Limit = 10.0, Low = real(null), High = real(null), Src = 'Usage table, full WIB days';
+let coll = MiniBankLookahead_CL
+| where TimeGenerated > st and Kind == 'capacity'
+| project TimeGenerated, Area, Resource, Item, Value, Unit, Limit, Low, High, Src = 'Look-ahead collector';
+let speed = AppRequests
+| where TimeGenerated > st and AppRoleName == 'minibank-api' and (Name endswith '/api/transfer' or Name endswith '/api/qris/pay' or Name endswith '/statement')
+| extend T = bin(TimeGenerated, 1m)
+| join kind=leftanti dm on T
+| summarize Value = percentile(DurationMs, 95), N = sum(ItemCount) by TimeGenerated = bin(TimeGenerated, 1h)
+| where N >= 50 and TimeGenerated + 1h <= now()
+| extend Area = 'Business transactions', Resource = 'minibank-api', Item = 'Business transactions P95 (per hour, drills left out)', Unit = 'ms', Limit = 1000.0, Low = real(null), High = 800.0, Src = 'AppRequests: transfer, QRIS payment, statement'
+| project-away N;
+union hostCpu, nodeDisk, podMem, laDay, coll, speed
+| project TimeGenerated, Area, Resource, Item, Value, Unit, Limit, Low, High, Src

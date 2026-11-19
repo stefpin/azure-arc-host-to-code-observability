@@ -1,0 +1,11 @@
+# Keep at least 2 of the 3 pods running during node drains and upgrades
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: minibank-transfer
+  namespace: minibank
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: minibank-transfer

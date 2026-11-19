@@ -1,0 +1,1 @@
+source | where csUriStem !~ '/api/health'

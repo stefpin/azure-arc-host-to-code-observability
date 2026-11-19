@@ -1,0 +1,37 @@
+{
+  "role": { "name": "minibank-transfer" },
+  "selfDiagnostics": { "destination": "console", "level": "INFO" },
+  "sampling": {
+    "percentage": 100,
+    "overrides": [
+      {
+        "telemetryType": "request",
+        "attributes": [
+          { "key": "url.path", "value": "/actuator/health.*", "matchType": "regexp" }
+        ],
+        "percentage": 0
+      }
+    ]
+  },
+  "preview": {
+    "processors": [
+      {
+        "type": "attribute",
+        "actions": [
+          {
+            "key": "url.path",
+            "pattern": "(?<prefix>/api/ledger/)\\d{6}(?<last4>\\d{4})",
+            "replace": "${prefix}******${last4}",
+            "action": "mask"
+          },
+          {
+            "key": "minibank.account",
+            "pattern": "\\d{6}(?<last4>\\d{4})",
+            "replace": "******${last4}",
+            "action": "mask"
+          }
+        ]
+      }
+    ]
+  }
+}

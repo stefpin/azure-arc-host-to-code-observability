@@ -1,0 +1,182 @@
+// Look-ahead trail (Grafana Canvas) on the board MiniBank - Look-ahead: one row of fields for the fixed spots of the panel.
+// READ-ONLY: reads only the Look-ahead risk register MiniBankLookahead() (the same function as the radar, tiles and register table).
+// The board setting 'Look ahead to' (variable ff: 0, 7, 14, 30 days or a date yyyy-mm-dd) moves the date; nothing else changes.
+// Known dates stay exact; capacity and speed dates come from the same straight-line trends; guard: only dates within 2 years.
+let dn = dynamic(['Sun','Mon','Tue','Wed','Thu','Fri','Sat']);
+let mn = dynamic(['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']);
+let nowW = now() + 7h;
+let ffs = trim(@'\s+', tostring(${ff:singlequote}));
+let ffn = todouble(ffs);
+let ffd = todatetime(ffs);
+let A0 = case(isnotnull(ffn), nowW + 1d * max_of(0.0, min_of(ffn, 730.0)), isnotnull(ffd), ffd + 12h, nowW);
+let A = max_of(nowW, min_of(A0, nowW + 730d));
+let FF = A > nowW + 1h;
+let fdd = (t: datetime) { strcat(tostring(dayofmonth(t)), ' ', tostring(mn[getmonth(t)]), iff(getyear(t) != getyear(nowW), strcat(' ', tostring(getyear(t))), '')) };
+let fd = (t: datetime) { strcat(tostring(dn[toint(dayofweek(t) / 1d)]), ' ', fdd(t)) };
+let th = (n: long) { iff(n >= 1000, strcat(tostring(n / 1000), ',', substring(tostring(1000 + n % 1000), 1)), tostring(n)) };
+let nf = (x: real) { iff(x >= 100.0, th(tolong(round(x, 0))), tostring(round(x, 1))) };
+let reg = materialize(MiniBankLookahead()
+| extend DueW = todatetime(extract(@'due ([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2})', 1, Limit)),
+         Wd = todouble(extract(@'warning is reached in ([0-9.]+) days', 1, Basis)),
+         AboveW = Basis has 'already above the' and Basis has 'warning',
+         WarnTxt = replace_string(extract(@'warning ([0-9.]+ [a-zA-Z%]+)', 1, Limit), '.0 ', ' '),
+         Lim = replace_regex(replace_regex(Limit, @'\.0 ', ' '), @' \(warning.*$', ''),
+         DL = todouble(DaysLeft),
+         NowV = todouble(extract(@'^(-?[0-9.]+)', 1, Now)));
+let ev = reg
+| extend Kinds = case(isnotnull(DueW), dynamic(['due']),
+                      Item startswith 'Business transactions P95', dynamic(['warn', 'limit']),
+                      Lens in ('Capacity', 'Service') and isnotnull(DL) and DL <= 730.0, dynamic(['limit']),
+                      Lens == 'Posture' and Status in ('Act', 'Watch'), dynamic(['carry']),
+                      dynamic([]))
+| mv-expand K = Kinds to typeof(string)
+| extend T = case(K == 'due', DueW,
+                  K == 'warn' and AboveW, nowW - 1m,
+                  K == 'warn' and isnotnull(Wd) and Wd <= 730.0, nowW + 1d * Wd,
+                  K == 'limit' and isnotnull(DL) and DL <= 0.0, nowW - 1m,
+                  K == 'limit' and isnotnull(DL) and DL <= 730.0, nowW + 1d * DL,
+                  datetime(null))
+| where K == 'carry' or (isnotnull(T) and T <= nowW + 730d)
+| extend Trend = K in ('warn', 'limit'), P95 = Item startswith 'Business transactions P95'
+| extend What = case(
+        K == 'warn', strcat('Payments P95 reach the ', WarnTxt, ' warning'),
+        P95, strcat('Payments P95 reach the ', Lim, ' limit'),
+        Item has 'pull token', 'Image pull token expires', Item has 'push token', 'Image push token lapses',
+        Item startswith 'Password expires', 'Oracle password expires', Item has 'evaluation', 'Windows evaluation ends',
+        Item has 'certificate', 'Ingress certificate expires', Item startswith 'Oldest', 'Oldest lab data starts to age out',
+        Item == 'Node disk used', strcat(Resource, ' disk reaches ', Lim),
+        Item == 'Memory used, busiest pod', strcat('Transfer pod memory reaches ', Lim),
+        Item == 'Data into Log Analytics per day', strcat('Log Analytics reaches its ', Lim, ' daily cap'),
+        Item has 'response', strcat(Resource, ' disk response reaches ', Lim),
+        Item == 'Memory in use', strcat(Resource, ' memory reaches ', Lim),
+        Item has 'Tablespace', strcat('Oracle tablespace reaches ', Lim),
+        Item endswith ' used', strcat(Resource, ' ', replace_string(Item, ' used', ''), ' full (', Lim, ')'),
+        Item has 'requests', strcat(Resource, ' ', tolower(Item), ' reach ', Lim),
+        Item startswith 'Pods', strcat(Resource, ' reaches the ', Lim, ' limit'),
+        Item has 'budget', strcat(replace_string(Item, ' - error budget left', ''), ' error budget used up'),
+        Item has 'backup', 'Full backup', Item has 'Windows update', 'Windows updates',
+        substring(strcat(Resource, ': ', Item), 0, 40)),
+    Short = case(
+        K == 'warn', strcat('P95 ', WarnTxt, ' warning'), P95, strcat('P95 ', Lim, ' limit'),
+        Item has 'pull token', 'Pull token expires', Item has 'push token', 'Push token lapses',
+        Item startswith 'Password expires', 'Oracle password', Item has 'evaluation', 'Windows eval ends',
+        Item has 'certificate', 'Ingress cert expires', Item startswith 'Oldest', 'Oldest data ages out',
+        Item == 'Node disk used', strcat(Resource, ' disk ', Lim), Item == 'Memory used, busiest pod', 'Transfer pod memory',
+        Item == 'Data into Log Analytics per day', 'LA daily cap', Item has 'response', strcat(Resource, ' disk resp.'),
+        Item == 'Memory in use', strcat(Resource, ' memory'), Item has 'Tablespace', 'Oracle tablespace',
+        Item endswith ' used', strcat(Resource, ' ', replace_string(Item, ' used', ''), ' full'),
+        Item has 'requests', strcat(Resource, iff(Item has 'Memory', ' mem', ' CPU'), ' requests'),
+        Item startswith 'Pods', strcat(Resource, ' pods'),
+        Item has 'budget', strcat(replace_string(Item, ' - error budget left', ''), ' budget out'),
+        K == 'carry', iff(Item has 'backup', 'Full backup', iff(Item has 'Windows update', 'Windows updates', Item)), substring(strcat(Resource, ' ', Item), 0, 20)),
+    Imp = case(
+        K == 'warn', 'payments slower than the warning level', P95, 'the 95 % under 1 s target is missed',
+        Item has 'pull token', 'image pulls fail: new or restarted pods cannot start', Item has 'push token', 'no new image pushes (none planned)',
+        Item startswith 'Password', 'the app can no longer log on to Oracle: payments fail', Item has 'evaluation', 'the VM shuts down every hour',
+        Item has 'certificate', 'clients reject the MiniBank web address', Item startswith 'Oldest', 'trends and back-tests lose their first days',
+        Item == 'Node disk used', 'OpenShift removes images and evicts pods', Item has 'busiest', 'the transfer pod restarts out of memory',
+        Item has 'Analytics', 'data collection stops until the cap resets', Item has 'response', 'slow storage slows database calls',
+        Item == 'Memory in use', 'the machine pages and slows down', Item has 'Tablespace', 'inserts fail: payments fail',
+        Item endswith ' used', 'writes stop on that machine', Item has 'budget', 'the service target is missed',
+        Item has 'requests', 'new or moved pods stay Pending', Item startswith 'Pods', 'no more pods can start on the node',
+        substring(Impact, 0, 60)),
+    Prep = case(
+        Status in ('Info', 'Planned'), '',
+        K == 'warn' or P95, 'find the step that slows payments', Item has 'pull token', 'renew the image pull token',
+        Item == 'Node disk used', strcat('free or grow the ', Resource, ' disk'), Item has 'busiest', 'raise the transfer pod memory limit',
+        Item has 'Analytics', 'raise the daily cap or trim noisy tables', Item startswith 'Password', 'change the Oracle passwords',
+        Item has 'evaluation', 'activate the Windows licences', Item has 'certificate', 'renew the ingress certificate',
+        Item has 'response', strcat('check the ', Resource, ' storage'), Item == 'Memory in use', strcat('add memory to ', Resource),
+        Item has 'Tablespace', 'grow the Oracle tablespace', Item endswith ' used', strcat('free space on ', Resource),
+        Item has 'requests' or Item startswith 'Pods', 'add a node or lower pod requests',
+        Item has 'budget', 'freeze risky changes and fix the failures', Item has 'backup', 'take a full backup',
+        Item has 'Windows update', 'patch the Windows VMs', 'plan the fix'),
+    Age = iff(K == 'carry' and Item startswith 'Days since', NowV + (A - nowW) / 1d, real(null)),
+    LimS = replace_regex(replace_string(replace_regex(Limit, @'\.0 ', ' '), 'at most ', ''), @'^1 days$', '1 day');
+let evg = materialize(ev
+| extend Day = iff(K == 'carry', datetime(null), startofday(T)), AgeR = round(Age, 1)
+| summarize N = count(), T = min(T), Res = strcat_array(array_sort_asc(make_set(Resource)), ', '), Status = take_any(Status), Owner = take_any(Owner),
+            Lens = take_any(Lens), Item = take_any(Item), Now = take_any(Now), LimS = take_any(LimS), Age = max(Age)
+    by What, Short, Imp, Prep, K, Trend, Day, AgeR
+| extend What = iff(N > 1, strcat(replace_string(replace_string(What, 'password expires', 'passwords expire'), 'evaluation ends', 'evaluations end'), ' (', N, ')'), What),
+         Short = iff(N > 1, strcat(replace_string(Short, 'Oracle password', 'Oracle passwords'), ' (', N, ')'), Short)
+| extend d = iff(K == 'carry', real(null), (T - A) / 1d)
+| extend Lapsed = K != 'carry' and d < 0.0 and Status in ('Planned', 'Info'),
+         Bitten = K != 'carry' and d < 0.0 and Status !in ('Planned', 'Info')
+| extend Z = case(K == 'carry' or d < 0.0, 0, d <= 7.0, 1, d <= 14.0, 2, d <= 30.0, 3, d <= 90.0, 4, d <= 180.0, 5, 6)
+| extend Col = case(Status == 'Info', '5', Status == 'Planned', '3', K == 'carry', iff(Status == 'Act', '1', '2'), Z <= 1, '1', Z <= 3, '2', '4')
+| extend G = iff(Trend, '○', '●'), Tm = format_datetime(T, 'HH:mm')
+| extend When = iff(Trend, strcat('~', fd(T)), strcat(fd(T), iff(d <= 30.0 and d >= -30.0, strcat(' ', Tm), ''))),
+         InTxt = case(d < 1.0, 'within a day', d < 10.0, strcat('in ', iff(Trend, '~', ''), tostring(round(d, 1)), ' d'),
+                      strcat('in ', iff(Trend, '~', ''), tostring(toint(round(d, 0))), ' d')));
+let zones = datatable(Z: int, Lbl: string, ZC: string) [ 1, 'NEXT 7 DAYS · act zone', '1', 2, 'NEXT 8–14 DAYS · watch', '2', 3, 'NEXT 15–30 DAYS · watch', '2', 4, 'IN 1–3 MONTHS · clear', '4', 5, 'IN 3–6 MONTHS · clear', '4', 6, 'BEYOND 6 MONTHS · horizon', '4' ];
+let nB = toscalar(evg | where Bitten | count);
+let nC = toscalar(evg | where K == 'carry' | count);
+let nL = toscalar(evg | where Lapsed | count);
+let nA = toscalar(evg | where Z == 1 and Status !in ('Info', 'Planned') | count);
+let nW = toscalar(evg | where Z in (2, 3) and Status !in ('Info', 'Planned') | count);
+// zone items (up to 4 per zone, nearest first)
+let ZI = toscalar(evg | where Z >= 1 | order by Z asc, T asc | extend I = row_number(1, prev(Z) != Z) | where I <= 4
+  | extend Sub = case(Status == 'Planned', strcat(When, ' · ', InTxt, ' · planned'), Status == 'Info', strcat(When, ' · ', InTxt, ' · for information'),
+                      strcat(When, ' · ', InTxt, ' · ', Owner))
+  | extend P = bag_pack(strcat('z', Z, I, '_n'), substring(What, 0, 40), strcat('z', Z, I, '_s'), Sub, strcat('z', Z, I, '_g'), G,
+                        strcat('z', Z, I, '_c'), Col, strcat('z', Z, I, '_t'), '30')
+  | summarize make_bag(P));
+let ZH = toscalar(zones | join kind=leftouter (evg | where Z >= 1 | summarize n = count() by Z) on Z
+  | extend n = coalesce(n, 0)
+  | extend P = bag_pack(strcat('z', Z, '_h'), strcat(Lbl, ' · ', case(n == 0, 'clear', n == 1, '1 item', strcat(n, ' items'))),
+                        strcat('z', Z, '_c'), iff(n > 0, ZC, '5'), strcat('w', Z, '_c'), iff(n > 0, ZC, '5'),
+                        strcat('z', Z, '_m'), iff(n > 4, strcat('+', n - 4, ' more: see the month view and the register'), ''))
+  | extend P = iff(n == 0, bag_merge(P, bag_pack(strcat('z', Z, '1_n'), 'Clear stretch: nothing due', strcat('z', Z, '1_t'), '5')), P)
+  | summarize make_bag(P));
+// backpack: already bitten (red), overdue and kept on purpose (orange), lapsed as planned / for information (one line)
+let LP = toscalar(evg | where Lapsed | order by T asc
+  | summarize strcat_array(make_list(case(Status == 'Planned', strcat(replace_string(Short, ' lapses', ''), ' lapsed ', fdd(T)),
+                                          Item startswith 'Oldest', strcat('oldest data ageing out (', fdd(T), ')'),
+                                          strcat(Short, ' (', fdd(T), ')'))), ' · '));
+let LS = toscalar(evg | where Lapsed | summarize strcat_array(make_set(iff(Status == 'Planned', 'as planned', 'for information')), ' / '));
+let BP = toscalar(union
+  (evg | where Bitten | extend Pri = 1, Nm = case(
+        Trend, strcat(replace_string(replace_string(What, ' reaches ', ' past '), ' reach the ', ' past the '), ' since ~', fdd(T)),
+        strcat(replace_string(replace_string(replace_string(replace_string(What, ' expires', ' EXPIRED'), ' expire ', ' EXPIRED '), ' ends', ' ENDED'), ' end ', ' ENDED '), ' ', fd(T), ' ', Tm)),
+        Sb = Imp, Gc = G, Cc = '1'),
+  (evg | where K == 'carry' | extend Pri = 2, Nm = case(
+        Item has 'backup', strcat(replace_string(Res, 'SQL Server ', 'SQL '), ' full backup ', nf(Age), ' days old'),
+        Item has 'Windows update', strcat(Res, ' Windows updates ', nf(Age), ' days old'),
+        Item has 'collector', strcat('Look-ahead collector last ran ', Now, ' ago'),
+        substring(strcat(Res, ': ', Item, ' ', Now), 0, 60)),
+        Sb = strcat('overdue, kept on purpose · limit ', LimS, ' · ', Owner), Gc = '●', Cc = Col),
+  (print x = 1 | where isnotempty(LP) | extend Pri = 3, Nm = substring(strcat(toupper(substring(LP, 0, 1)), substring(LP, 1)), 0, 64),
+        Sb = strcat(LS, ': nothing to do'),
+        Gc = '●', Cc = '3', T = datetime(null))
+  | order by Pri asc, T asc | serialize I = row_number() | where I <= 7
+  | extend P = bag_pack(strcat('p', I, '_n'), Nm, strcat('p', I, '_s'), Sb, strcat('p', I, '_g'), Gc, strcat('p', I, '_c'), Cc)
+  | summarize make_bag(P));
+let nP = nB + nC + iff(nL > 0, 1, 0);
+let PH = bag_pack('p_h', strcat('IN YOUR BACKPACK · ', iff(nB > 0, strcat(nB, ' already bitten'), 'nothing bitten yet'),
+                               iff(nC > 0, strcat(' · ', nC, ' overdue'), ''), iff(nL > 0, strcat(' · ', nL, ' lapsed'), ''),
+                               iff(nP > 7, strcat(' · +', nP - 7, ' more'), '')),
+                  'p_c', case(nB > 0, '1', nC > 0, '2', '5'));
+// if nobody acts
+let NX = toscalar(evg | where Z >= 1 and Status !in ('Info', 'Planned') | top 1 by T asc | project strcat('Next: ', What, ' ', When));
+let PR = toscalar(evg | where (Bitten or Z between (1 .. 3)) and isnotempty(Prep) | extend O = iff(Bitten, 0, 1) | order by O asc, T asc | take 2 | serialize I = row_number()
+  | extend Txt = strcat(I, '. ', toupper(substring(Prep, 0, 1)), substring(Prep, 1), iff(Bitten, ' now (already bitten)', strcat(' before ', iff(Trend, '~', ''), fdd(T), iff(Trend, '', strcat(' ', Tm)))))
+  | summarize make_list(Txt));
+let XT = case(nB > 0 and nA > 0, strcat(nB, ' already bitten by ', fd(A), '; ', nA, ' more within 7 days.'),
+              nB > 0, strcat(nB, iff(nB == 1, ' risk has', ' risks have'), ' already bitten by ', fd(A), '.'),
+              nA > 0, strcat(nA, iff(nA == 1, ' risk bites', ' risks bite'), ' within 7 days of ', fd(A), '.'),
+              strcat('Nothing bites within 7 days', iff(nW > 0, strcat('; ', nW, ' in the watch zone'), ''), '.'));
+let X = bag_pack('x_t', XT, 'x_1', coalesce(NX, 'Nothing dated within 2 years.'), 'x_2', coalesce(tostring(PR[0]), 'Nothing to prepare within 30 days.'),
+                 'x_3', coalesce(tostring(PR[1]), ''), 'x_c', case(nB > 0 or nA > 0, '1', nW > 0, '2', '4'));
+let ffv = ffs;
+let fy = (t: datetime) { strcat(fd(t), iff(getyear(t) == getyear(nowW), strcat(' ', tostring(getyear(t))), ''), ' ', format_datetime(t, 'HH:mm'), ' WIB') };
+let HD = bag_pack('t_as', iff(FF, strcat('THE TRAIL AHEAD · fast-forward to ', fy(A)), strcat('THE TRAIL AHEAD · today, ', fy(nowW))),
+                  't_pin', iff(FF, 'YOU WOULD BE HERE', 'YOU ARE HERE'), 't_pd', fd(A),
+                  'bn_t', iff(FF, strcat('FAST-FORWARD · ', fy(A), ' · the trail as it would look if nobody acts (known dates exact; capacity and speed from the same straight-line trends)'),
+                                  strcat('TODAY · read ', format_datetime(nowW, 'HH:mm'), ' WIB from the risk register · pick a stop (top right) or use “Look ahead to” at the top of the board to fast-forward')),
+                  'bn_b', iff(FF, '27', '0'), 'bn_c', iff(FF, '2', '9'), 'bn_tc', iff(FF, '2', '5'),
+                  'b1_c', iff(not(FF), '29', '9'), 'b2_c', iff(ffv == '7', '29', '9'), 'b3_c', iff(ffv == '14', '29', '9'),
+                  'b4_c', iff(ffv == '30', '29', '9'), 'b5_c', iff(ffv == '2026-12-11', '29', '9'),
+                  'ft', strcat('Read ', format_datetime(nowW, 'HH:mm'), ' WIB from the risk register; refreshes every 15 minutes. Fast-forward moves the date, not the data. Radar, tiles and register stay on today.'));
+print b = bag_merge(ZI, ZH, BP, PH, X, HD, dynamic({"t_as":"","b1_c":"0","b2_c":"0","b3_c":"0","b4_c":"0","b5_c":"0","bn_b":"0","bn_c":"0","bn_t":"","bn_tc":"0","w1_c":"0","w2_c":"0","w3_c":"0","w4_c":"0","w5_c":"0","w6_c":"0","t_pin":"","t_pd":"","p_c":"0","p_h":"","p1_g":"","p1_c":"0","p1_n":"","p1_s":"","p2_g":"","p2_c":"0","p2_n":"","p2_s":"","p3_g":"","p3_c":"0","p3_n":"","p3_s":"","p4_g":"","p4_c":"0","p4_n":"","p4_s":"","p5_g":"","p5_c":"0","p5_n":"","p5_s":"","p6_g":"","p6_c":"0","p6_n":"","p6_s":"","p7_g":"","p7_c":"0","p7_n":"","p7_s":"","z1_c":"0","z1_h":"","z11_g":"","z11_c":"0","z11_n":"","z11_t":"0","z11_s":"","z12_g":"","z12_c":"0","z12_n":"","z12_t":"0","z12_s":"","z13_g":"","z13_c":"0","z13_n":"","z13_t":"0","z13_s":"","z14_g":"","z14_c":"0","z14_n":"","z14_t":"0","z14_s":"","z1_m":"","z2_c":"0","z2_h":"","z21_g":"","z21_c":"0","z21_n":"","z21_t":"0","z21_s":"","z22_g":"","z22_c":"0","z22_n":"","z22_t":"0","z22_s":"","z23_g":"","z23_c":"0","z23_n":"","z23_t":"0","z23_s":"","z24_g":"","z24_c":"0","z24_n":"","z24_t":"0","z24_s":"","z2_m":"","z3_c":"0","z3_h":"","z31_g":"","z31_c":"0","z31_n":"","z31_t":"0","z31_s":"","z32_g":"","z32_c":"0","z32_n":"","z32_t":"0","z32_s":"","z33_g":"","z33_c":"0","z33_n":"","z33_t":"0","z33_s":"","z34_g":"","z34_c":"0","z34_n":"","z34_t":"0","z34_s":"","z3_m":"","z4_c":"0","z4_h":"","z41_g":"","z41_c":"0","z41_n":"","z41_t":"0","z41_s":"","z42_g":"","z42_c":"0","z42_n":"","z42_t":"0","z42_s":"","z43_g":"","z43_c":"0","z43_n":"","z43_t":"0","z43_s":"","z44_g":"","z44_c":"0","z44_n":"","z44_t":"0","z44_s":"","z4_m":"","z5_c":"0","z5_h":"","z51_g":"","z51_c":"0","z51_n":"","z51_t":"0","z51_s":"","z52_g":"","z52_c":"0","z52_n":"","z52_t":"0","z52_s":"","z53_g":"","z53_c":"0","z53_n":"","z53_t":"0","z53_s":"","z54_g":"","z54_c":"0","z54_n":"","z54_t":"0","z54_s":"","z5_m":"","z6_c":"0","z6_h":"","z61_g":"","z61_c":"0","z61_n":"","z61_t":"0","z61_s":"","z62_g":"","z62_c":"0","z62_n":"","z62_t":"0","z62_s":"","z63_g":"","z63_c":"0","z63_n":"","z63_t":"0","z63_s":"","z64_g":"","z64_c":"0","z64_n":"","z64_t":"0","z64_s":"","z6_m":"","x_c":"0","x_t":"","x_1":"","x_2":"","x_3":"","ft":""}))
+| evaluate bag_unpack(b)

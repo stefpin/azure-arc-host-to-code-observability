@@ -1,0 +1,31 @@
+// MiniBankErrorBudget  (category: MiniBank Look-ahead; parameters: window:timespan=7d)
+// MiniBankErrorBudget(window:timespan=7d) - Look-ahead v1.0 service budget of the business transactions (minibank-api:
+// /api/transfer, /api/qris/pay, /statement). Targets agreed 16 Nov 2026: 99.5 % succeed (5xx = failure) and 95 % finish
+// under 1 second. Window = the last 7 days, never before 13 Nov 2026 14:00 WIB; drill minutes (+5 min) are left out.
+// Budget = the failures (or slow ones) the target allows; burn rate = the last 24 hours' share of bad ones / the allowed share.
+let st = max_of(now() - window, datetime(2026-11-13T07:00:00Z));
+let dm = MiniBankDrillMinutes(st);
+let req = AppRequests
+| where TimeGenerated > st and AppRoleName == 'minibank-api' and (Name endswith '/api/transfer' or Name endswith '/api/qris/pay' or Name endswith '/statement')
+| extend T = bin(TimeGenerated, 1m)
+| join kind=leftanti dm on T
+| extend Bad = toint(ResultCode) >= 500, Slow = DurationMs > 1000.0, Recent = TimeGenerated > now() - 24h;
+let s = req
+| summarize Total = sum(ItemCount), BadN = sumif(ItemCount, Bad), SlowN = sumif(ItemCount, Slow),
+            Total24 = sumif(ItemCount, Recent), Bad24 = sumif(ItemCount, Bad and Recent), Slow24 = sumif(ItemCount, Slow and Recent),
+            First = min(TimeGenerated);
+let one = (o:string, tgt:string, allowed:real) {
+  s
+  | extend BadX = iff(o == 'Success rate', BadN, SlowN), BadX24 = iff(o == 'Success rate', Bad24, Slow24)
+  | extend Budget = allowed * Total, Net24 = BadX24 - allowed * Total24
+  | extend Remaining = Budget - BadX
+  | extend RemainingPct = iff(Budget > 0, 100.0 * Remaining / Budget, real(null)),
+           Actual = iff(Total > 0, 100.0 * (Total - BadX) / Total, real(null)),
+           Burn24 = iff(Total24 > 0, (1.0 * BadX24 / Total24) / allowed, real(null)),
+           DaysToZero = case(Remaining <= 0, 0.0, Net24 > 0, Remaining / Net24, real(null))
+  | extend Status = case(isnull(RemainingPct), 'Info', Remaining <= 0, 'Act', isnotnull(DaysToZero) and DaysToZero <= 7, 'Act', isnotnull(DaysToZero) and DaysToZero <= 30, 'Watch', RemainingPct < 25, 'Watch', 'OK')
+  | project Objective = o, Target = tgt, Actual = round(Actual, 3), RemainingPct = round(RemainingPct, 1), Burn24 = round(Burn24, 2), DaysToZero = round(DaysToZero, 1), Status,
+            Transactions = Total, BadOnes = BadX, Allowed = round(Budget, 0), Last24h = Total24, BadLast24h = BadX24,
+            Basis = strcat(Total, ' business transactions since ', format_datetime(First + 7h, 'yyyy-MM-dd HH:mm'), ' WIB (drills left out): ', BadX, ' ', iff(o == 'Success rate', 'failed', 'slower than 1 s'), ', ', round(Budget, 0), ' allowed; last 24 h burn rate ', round(Burn24, 2), 'x')
+};
+union one('Success rate', '99.5 % succeed', 0.005), one('Speed', '95 % under 1 s', 0.05)

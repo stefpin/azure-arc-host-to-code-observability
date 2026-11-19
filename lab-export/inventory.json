@@ -1,0 +1,490 @@
+[
+  {
+    "resourceGroup": "MA_amw-appmon_indonesiacentral_managed",
+    "name": "amw-appmon",
+    "type": "Microsoft.Insights/dataCollectionEndpoints",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "MA_amw-appmon_indonesiacentral_managed",
+    "name": "amw-appmon",
+    "type": "Microsoft.Insights/dataCollectionRules",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "KubernetesRecordingRulesRuleGroup-arc-ocp-minibank",
+    "type": "Microsoft.AlertsManagement/prometheusRuleGroups",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "NodeRecordingRulesRuleGroup-arc-ocp-minibank",
+    "type": "Microsoft.AlertsManagement/prometheusRuleGroups",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "UXRecordingRulesRuleGroup - -arc-ocp-minibank",
+    "type": "Microsoft.AlertsManagement/prometheusRuleGroups",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "HV-HOST-02-data-apps",
+    "type": "Microsoft.Compute/disks",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": "Premium_LRS"
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "HV-HOST-02-data-ocp1",
+    "type": "Microsoft.Compute/disks",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": "Premium_LRS"
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "HV-HOST-02-data-ocp2",
+    "type": "Microsoft.Compute/disks",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": "Premium_LRS"
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "HV-HOST-02-data-ocp3",
+    "type": "Microsoft.Compute/disks",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": "Premium_LRS"
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "HV-HOST-02-data-ocp4",
+    "type": "Microsoft.Compute/disks",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": "Premium_LRS"
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "HV-HOST-02_OsDisk_1_ba6a3ec0d5be481bad182d9786fd8c73",
+    "type": "Microsoft.Compute/disks",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": "Premium_LRS"
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "HV-HOST-02",
+    "type": "Microsoft.Compute/virtualMachines",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "HV-HOST-02/AzureMonitorWindowsAgent",
+    "type": "Microsoft.Compute/virtualMachines/extensions",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "HV-HOST-02/MDE.Windows",
+    "type": "Microsoft.Compute/virtualMachines/extensions",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "<ACR_NAME>",
+    "type": "Microsoft.ContainerRegistry/registries",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": "Basic"
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "amg-appmon",
+    "type": "Microsoft.Dashboard/grafana",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": "Standard"
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "APP-RHEL",
+    "type": "Microsoft.HybridCompute/machines",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "APP-SQL",
+    "type": "Microsoft.HybridCompute/machines",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "APP-WIN",
+    "type": "Microsoft.HybridCompute/machines",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "APP-RHEL/AzureMonitorLinuxAgent",
+    "type": "Microsoft.HybridCompute/machines/extensions",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "APP-RHEL/MDE.Linux",
+    "type": "Microsoft.HybridCompute/machines/extensions",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "APP-SQL/AzureMonitorWindowsAgent",
+    "type": "Microsoft.HybridCompute/machines/extensions",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "APP-SQL/MDE.Windows",
+    "type": "Microsoft.HybridCompute/machines/extensions",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "APP-SQL/MicrosoftDefenderForSQL",
+    "type": "Microsoft.HybridCompute/machines/extensions",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "APP-WIN/AzureMonitorWindowsAgent",
+    "type": "Microsoft.HybridCompute/machines/extensions",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "APP-WIN/MDE.Windows",
+    "type": "Microsoft.HybridCompute/machines/extensions",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "appi-minibank",
+    "type": "Microsoft.Insights/components",
+    "location": "indonesiacentral",
+    "kind": "web",
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "MSProm-indonesiacentral-arc-ocp-minibank",
+    "type": "Microsoft.Insights/dataCollectionEndpoints",
+    "location": "indonesiacentral",
+    "kind": "Linux",
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "dce-otlp",
+    "type": "Microsoft.Insights/dataCollectionEndpoints",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "MSCI-indonesiacentral-arc-ocp-minibank",
+    "type": "Microsoft.Insights/dataCollectionRules",
+    "location": "indonesiacentral",
+    "kind": "Linux",
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "MSProm-indonesiacentral-arc-ocp-minibank",
+    "type": "Microsoft.Insights/dataCollectionRules",
+    "location": "indonesiacentral",
+    "kind": "Linux",
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "dcr-minibank-dbsnap",
+    "type": "Microsoft.Insights/dataCollectionRules",
+    "location": "indonesiacentral",
+    "kind": "Linux",
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "dcr-minibank-hostperf",
+    "type": "Microsoft.Insights/dataCollectionRules",
+    "location": "indonesiacentral",
+    "kind": "Windows",
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "dcr-minibank-iis",
+    "type": "Microsoft.Insights/dataCollectionRules",
+    "location": "indonesiacentral",
+    "kind": "Windows",
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "dcr-minibank-lookahead",
+    "type": "Microsoft.Insights/dataCollectionRules",
+    "location": "indonesiacentral",
+    "kind": "Direct",
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "dcr-minibank-rca",
+    "type": "Microsoft.Insights/dataCollectionRules",
+    "location": "indonesiacentral",
+    "kind": "Direct",
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "dcr-minibank-vmperf-linux",
+    "type": "Microsoft.Insights/dataCollectionRules",
+    "location": "indonesiacentral",
+    "kind": "Linux",
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "dcr-minibank-vmperf-win",
+    "type": "Microsoft.Insights/dataCollectionRules",
+    "location": "indonesiacentral",
+    "kind": "Windows",
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "dcr-otlp",
+    "type": "Microsoft.Insights/dataCollectionRules",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "alr-minibank-decline-spike",
+    "type": "Microsoft.Insights/scheduledqueryrules",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "alr-minibank-failed-value-idr",
+    "type": "Microsoft.Insights/scheduledqueryrules",
+    "location": "indonesiacentral",
+    "kind": "LogAlert",
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "alr-minibank-failure-rate-high",
+    "type": "Microsoft.Insights/scheduledqueryrules",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "alr-minibank-journey-success-low",
+    "type": "Microsoft.Insights/scheduledqueryrules",
+    "location": "indonesiacentral",
+    "kind": "LogAlert",
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "alr-ocp-node-not-ready",
+    "type": "Microsoft.Insights/scheduledqueryrules",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "b8306b52-143d-537f-a97b-a92fff57ad89",
+    "type": "Microsoft.Insights/workbooks",
+    "location": "indonesiacentral",
+    "kind": "shared",
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "5f4b748c-3b48-5d08-b428-24cf383ede28",
+    "type": "Microsoft.Insights/workbooks",
+    "location": "indonesiacentral",
+    "kind": "shared",
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "arc-ocp-minibank",
+    "type": "Microsoft.Kubernetes/connectedClusters",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "id-otelcol",
+    "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "amw-appmon",
+    "type": "Microsoft.Monitor/accounts",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "bas-appmon",
+    "type": "Microsoft.Network/bastionHosts",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": "Basic"
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "natgw-appmon",
+    "type": "Microsoft.Network/natGateways",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": "Standard"
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "HV-HOST-02VMNic",
+    "type": "Microsoft.Network/networkInterfaces",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "nsg-snet-appmon-host",
+    "type": "Microsoft.Network/networkSecurityGroups",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "vnet-appmon-AzureBastionSubnet-nsg-indonesiacentral",
+    "type": "Microsoft.Network/networkSecurityGroups",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "pip-bas-appmon",
+    "type": "Microsoft.Network/publicIPAddresses",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": "Standard"
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "pip-natgw-appmon",
+    "type": "Microsoft.Network/publicIPAddresses",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": "Standard"
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "vnet-appmon",
+    "type": "Microsoft.Network/virtualNetworks",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "law-appmon",
+    "type": "Microsoft.OperationalInsights/workspaces",
+    "location": "indonesiacentral",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "stminibank6824",
+    "type": "Microsoft.Storage/storageAccounts",
+    "location": "indonesiacentral",
+    "kind": "StorageV2",
+    "sku": "Standard_LRS"
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "Failure Anomalies - appi-minibank",
+    "type": "microsoft.alertsmanagement/smartDetectorAlertRules",
+    "location": "global",
+    "kind": null,
+    "sku": null
+  },
+  {
+    "resourceGroup": "rg-appmon-openshift-demo",
+    "name": "ag-appmon-email",
+    "type": "microsoft.insights/actiongroups",
+    "location": "global",
+    "kind": null,
+    "sku": null
+  }
+]

@@ -1,0 +1,8 @@
+Optional: put your own logo in this folder (web/public/brand/) BEFORE "npm run build".
+
+1. Save it here as  logo.svg  (preferred)  or  logo.png .
+2. Build again: npm.cmd run build  (Vite copies this folder to dist/brand/, served as /brand/...).
+
+The header tries /brand/logo.svg first, then /brand/logo.png. If neither exists, the page shows only the
+text wordmark "MiniBank" in brand blue. The logo is shown only on the white header bar.
+Use only a logo you own or are allowed to use. MiniBank is a demo application with synthetic data only.

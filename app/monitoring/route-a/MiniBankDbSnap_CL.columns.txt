@@ -1,0 +1,10 @@
+# Custom table MiniBankDbSnap_CL in law-appmon (Route A). Computer and FilePath are filled by the Azure Monitor Agent.
+# Same schema as MiniBankDbSnap_CL.table.json. Use these columns for the table and for the DCR stream declaration.
+TimeGenerated datetime
+Computer string
+FilePath string
+DbEngine string
+SnapshotType string
+Name string
+Value real
+Detail string

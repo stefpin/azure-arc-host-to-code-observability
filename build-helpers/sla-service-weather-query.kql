@@ -1,0 +1,167 @@
+// Service weather (Grafana Canvas) for the board MiniBank - SLA and Failure Rate. READ-ONLY: AppRequests and AppAvailabilityResults
+// (the same calls and colour rules as the five tiles), the lab drill windows (MiniBankDrills, MiniBankDrillMinutes) and the Look-ahead
+// risk register (MiniBankLookahead). One row of text and colour-code fields for the fixed spots of the panel. Pinned to now.
+let nowU = now();
+let nowW = nowU + 7h;
+let dn = dynamic(['Sun','Mon','Tue','Wed','Thu','Fri','Sat']);
+let mn = dynamic(['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']);
+let fdn = (t: datetime) { tostring(dn[toint(dayofweek(t) / 1d)]) };
+let fdd = (t: datetime) { strcat(tostring(dayofmonth(t)), ' ', tostring(mn[getmonth(t)])) };
+let fd = (t: datetime) { strcat(fdn(t), ' ', fdd(t)) };
+let p2 = (x: real) { iff(isnull(x), '', strcat(iff(x < 0, '-', ''), tostring(tolong(round(abs(x) * 100)) / 100), '.', substring(tostring(100 + tolong(round(abs(x) * 100)) % 100), 1))) };
+let p3 = (x: real) { iff(isnull(x), '', strcat(tostring(tolong(round(x * 1000)) / 1000), '.', substring(tostring(1000 + tolong(round(x * 1000)) % 1000), 1))) };
+let th = (n: long) { case(n >= 1000000, strcat(tostring(n / 1000000), ',', substring(tostring(1000 + (n / 1000) % 1000), 1), ',', substring(tostring(1000 + n % 1000), 1)),
+                          n >= 1000, strcat(tostring(n / 1000), ',', substring(tostring(1000 + n % 1000), 1)), tostring(n)) };
+let ICON = dynamic({'sun': '☀️', 'cloud': '⛅', 'rain': '🌧️', 'storm': '⛈️', 'build': '🌫️', 'none': '❔', 'risk': '🌩️', 'warm': '⛅', 'clear': '☀️', 'out': '⛈️'});
+let CODE = dynamic({'sun': '4', 'cloud': '2', 'rain': '1', 'storm': '1', 'build': '5', 'none': '5'});
+let todayW = startofday(nowW);
+let d0W = todayW - 6d;
+let st = nowU - 7d;
+let countFrom = datetime(2026-11-13);
+let bwStart = max_of(nowU - 7d, datetime(2026-11-13T07:00:00Z));
+let dm = materialize(MiniBankDrillMinutes(st) | extend Drill = 1);
+let req = materialize(AppRequests
+| where TimeGenerated >= st and AppRoleName == 'minibank-api' and Name !has 'health' and Name has '/api/'
+| project TimeGenerated, DurationMs, Code = toint(ResultCode), ItemCount, T = bin(TimeGenerated, 1m)
+| join kind=leftouter dm on T
+| project TimeGenerated, DurationMs, Code, ItemCount, InDrill = isnotnull(Drill));
+let prb = materialize(AppAvailabilityResults
+| where TimeGenerated >= st
+| project TimeGenerated, Ok = Success == true, T = bin(TimeGenerated, 1m)
+| join kind=leftouter dm on T
+| project TimeGenerated, Ok, InDrill = isnotnull(Drill));
+// ---- NOW: the last 15 minutes, live (drills included), exactly the tiles' rules
+let NOWB = toscalar(req | where TimeGenerated > nowU - 15m
+| summarize N = sum(ItemCount), F = sumif(ItemCount, Code >= 500), D = sumif(ItemCount, Code == 409), P95 = percentile(DurationMs, 95)
+| extend X = 1
+| join kind=inner (prb | where TimeGenerated > nowU - 15m | summarize Pn = count(), Pok = countif(Ok) | extend X = 1) on X
+| extend N = coalesce(N, long(0)), F = coalesce(F, long(0)), D = coalesce(D, long(0))
+| extend Fr = iff(N > 0, 100.0 * F / N, real(null)), Av = iff(Pn > 0, 100.0 * Pok / Pn, real(null))
+| extend Su = 100.0 - Fr
+| extend K = case(N == 0, 'none', Su < 99 or Fr >= 2 or Av < 99, 'storm', P95 >= 1000, 'rain', Su < 99.9 or Fr >= 1 or Av < 99.9 or P95 >= 800, 'cloud', 'sun')
+| extend Wd = case(K == 'sun', 'Sunny', K == 'cloud', 'Cloudy', K == 'rain', 'Rainy', K == 'storm', 'Stormy', 'No data'),
+         Sb = case(K == 'none', 'No calls in the last 15 minutes',
+                   K == 'storm' and Fr >= 1, strcat('Technical failures ', p2(Fr), ' %'),
+                   K == 'storm', strcat('Probe ', Pok, ' of ', Pn, ' OK'),
+                   K == 'rain', strcat('Slow: P95 ', th(tolong(round(P95))), ' ms (SLA 1,000)'),
+                   K == 'cloud' and Su < 99.9, strcat('Success ', p2(Su), ' % (target 99.9)'),
+                   K == 'cloud' and Av < 99.9, strcat('Probe ', Pok, ' of ', Pn, ' OK'),
+                   K == 'cloud', strcat('P95 ', tolong(round(P95)), ' ms (above 800)'),
+                   'All targets met')
+| project B = bag_pack('now_h', strcat('NOW  ·  last 15 minutes  ·  ', format_datetime(nowW, 'HH:mm'), ' WIB'), 'now_w', Wd, 'now_i', tostring(ICON[K]), 'now_s', Sb,
+                       'now_sc', tostring(CODE[K]), 'now_c', tostring(CODE[K]),
+                       'now_1', strcat(th(N), ' calls  ·  ', th(F), iff(F == 1, ' technical failure', ' technical failures')),
+                       'now_2', strcat('P95 ', iff(isnull(P95), '-', th(tolong(round(P95)))), ' ms  ·  probe ', Pok, ' of ', Pn, ' OK'),
+                       'now_3', strcat(th(D), iff(D == 1, ' business decline', ' business declines'), ' (not failures)')));
+// ---- LAST 7 DAYS: one tile per WIB day, drill minutes left out; days before 13 Nov 2026 were lab build days
+let dreq = req | where not(InDrill) | extend Day = startofday(TimeGenerated + 7h) | where Day >= d0W
+| summarize N = sum(ItemCount), F = sumif(ItemCount, Code >= 500), P95 = percentile(DurationMs, 95) by Day;
+let dprb = prb | where not(InDrill) | extend Day = startofday(TimeGenerated + 7h) | where Day >= d0W | summarize Pn = count(), Pok = countif(Ok) by Day;
+let ddr = MiniBankDrills() | extend Day = startofday(DrillStart + 7h) | where Day >= d0W | summarize Drills = count() by Day;
+let DAYB = toscalar(range i from 0 to 6 step 1 | extend Day = d0W + 1d * i
+| join kind=leftouter dreq on Day | join kind=leftouter dprb on Day | join kind=leftouter ddr on Day
+| extend N = coalesce(N, long(0)), F = coalesce(F, long(0)), Pn = coalesce(Pn, long(0)), Pok = coalesce(Pok, long(0)), Drills = coalesce(Drills, long(0))
+| extend Counted = Day >= countFrom and N > 0, Today = Day == todayW
+| extend Fr = iff(N > 0, 100.0 * F / N, real(null)), Av = iff(Pn > 0, 100.0 * Pok / Pn, real(null)), Miss = Pn - Pok
+| extend Su = 100.0 - Fr
+| extend K = case(not(Counted), 'build', Su < 99 or Fr >= 2 or Av < 99, 'storm', P95 >= 1000, 'rain', Su < 99.9 or Fr >= 1 or Av < 99.9 or P95 >= 800, 'cloud', 'sun')
+| extend R = case(K == 'storm' and Fr >= 1, strcat('5xx ', p2(Fr), ' %'), K == 'storm', strcat(Miss, ' probe misses'), K == 'rain', 'P95 above 1 s',
+                  K == 'cloud' and Su < 99.9, strcat('5xx ', p2(Fr), ' %'), K == 'cloud' and Av < 99.9, strcat(Miss, iff(Miss == 1, ' probe miss', ' probe misses')),
+                  K == 'cloud', 'P95 above 800 ms', '')
+| extend I = tostring(toint(i) + 1)
+| extend P = bag_pack(strcat('d', I, '_n'), iff(Today, 'Today', fdn(Day)), strcat('d', I, '_t'), fdd(Day), strcat('d', I, '_i'), tostring(ICON[K]),
+                      strcat('d', I, '_v'), iff(Counted, strcat(th(tolong(round(P95))), ' ms'), 'Lab build'),
+                      strcat('d', I, '_s'), iff(Counted, strcat(p2(Su), ' % ok'), 'not counted'),
+                      strcat('d', I, '_r'), R, strcat('d', I, '_rc'), iff(K in ('storm', 'rain'), '1', '2'),
+                      strcat('d', I, '_x'), case(not(Counted), 'drills not logged', Drills > 0, strcat('⚡ ', Drills, iff(Drills == 1, ' drill', ' drills'), iff(Today, ' so far', '')), 'no drills'),
+                      strcat('d', I, '_xc'), iff(Counted and Drills > 0, '10', '5'),
+                      strcat('d', I, '_c'), tostring(CODE[K]), strcat('d', I, '_k'), iff(Today, '3', '9'))
+| summarize make_bag(P));
+// ---- ERROR BUDGET: last 7 days (never before 13 Nov 2026 14:00 WIB), drills left out, against this board's SLA
+let BW = toscalar(req | where TimeGenerated > bwStart and not(InDrill)
+| summarize Tot = sum(ItemCount), Bad = sumif(ItemCount, Code >= 500), Slow = sumif(ItemCount, DurationMs > 1000.0),
+            Tot24 = sumif(ItemCount, TimeGenerated > nowU - 24h), Bad24 = sumif(ItemCount, TimeGenerated > nowU - 24h and Code >= 500),
+            Slow24 = sumif(ItemCount, TimeGenerated > nowU - 24h and DurationMs > 1000.0)
+| project B = bag_pack('Tot', Tot, 'Bad', Bad, 'Slow', Slow, 'Tot24', Tot24, 'Bad24', Bad24, 'Slow24', Slow24));
+let BUDT = materialize(datatable(O: string, A: real, Lbl: string) ['s', 0.001, 'Success (SLA 99.9 %)', 'p', 0.05, 'Speed (95 % under 1 s)']
+| extend Tot = tolong(BW.Tot), Tot24 = tolong(BW.Tot24), Bad = iff(O == 's', tolong(BW.Bad), tolong(BW.Slow)), Bad24 = iff(O == 's', tolong(BW.Bad24), tolong(BW.Slow24))
+| extend Budget = A * Tot, Net24 = Bad24 - A * Tot24
+| extend Rem = Budget - Bad
+| extend RemPct = iff(Budget > 0, 100.0 * Rem / Budget, real(null)), Act = iff(Tot > 0, 100.0 * (Tot - Bad) / Tot, real(null)),
+         Burn = iff(Tot24 > 0, (1.0 * Bad24 / Tot24) / A, real(null)), DZ = case(Budget > 0 and Rem <= 0, 0.0, Net24 > 0, Rem / Net24, real(null))
+| extend Lit = toint(max_of(0.0, min_of(20.0, round(coalesce(RemPct, 0.0) / 5.0)))),
+         Col = case(isnull(RemPct), '5', RemPct <= 0 or (isnotnull(DZ) and DZ <= 7), '1', RemPct < 25 or (isnotnull(DZ) and DZ <= 30), '2', '4'),
+         VCol = iff(O == 's', case(isnull(Act), '5', Act < 99, '1', Act < 99.9, '2', '4'), case(isnull(Act), '5', Act < 95, '1', '4'))
+| extend Val = iff(O == 's', strcat(p3(Act), ' %'), strcat(p2(Act), ' %')),
+         Sub = case(isnull(RemPct), 'no calls in the window yet',
+                    RemPct <= 0, strcat('budget used up · ', th(Bad), ' bad of ', th(tolong(round(Budget))), ' allowed'),
+                    strcat(toint(round(RemPct)), ' % of the budget left · burn ', p2(Burn), iff(isnotnull(Burn), '×', ''),
+                           iff(isnotnull(DZ) and DZ <= 30, strcat(' · out ~', fd(nowW + 1d * DZ)), ' (last 24 h)'))));
+let BUD1 = toscalar(BUDT | extend P = bag_pack(strcat('b', O, '_l'), Lbl, strcat('b', O, '_v'), Val, strcat('b', O, '_vc'), VCol, strcat('b', O, '_s'), Sub) | summarize make_bag(P));
+let BUD2 = toscalar(BUDT | mv-expand i = range(1, 20) to typeof(int) | extend P = bag_pack(strcat('b', O, '_', i), iff(i <= Lit, Col, '8')) | summarize make_bag(P));
+let OUT = toscalar(BUDT | where isnotnull(DZ) and DZ > 0 and DZ <= 8 | summarize make_bag(bag_pack(O, startofday(nowW + 1d * DZ))));
+// ---- Look-ahead register: payments speed trend (same row as Scene 7D) and dated risks to the service
+let reg = materialize(MiniBankLookahead());
+let spd = toscalar(reg | where Item startswith 'Business transactions P95' | take 1
+| project B = bag_pack('V', todouble(extract(@'^([0-9.]+)', 1, Now)), 'S', todouble(extract(@'Trend \+?(-?[0-9.]+) ', 1, Basis)), 'St', Status,
+                       'WarnD', todatetime(extract(@'warning is reached in [0-9.]+ days \(([0-9]{4}-[0-9]{2}-[0-9]{2})\)', 1, Basis)),
+                       'LimD', todatetime(extract(@'limit in [0-9.]+ days \(([0-9]{4}-[0-9]{2}-[0-9]{2})\)', 1, Basis))));
+let Vp = todouble(spd.V);
+let Sp = todouble(spd.S);
+let F7 = iff(isnotnull(Vp) and isnotnull(Sp), Vp + 7.0 * Sp, real(null));
+let svc = materialize(reg
+| where Status in ('Act', 'Watch') and Lens in ('Capacity', 'Calendar') and isnotnull(DaysLeft)
+| where not(Item startswith 'Business transactions P95' or Item has 'budget' or Item has 'push' or Item startswith 'Oldest' or Item has 'Analytics' or Item has 'collector')
+| extend DueW = todatetime(extract(@'due ([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2})', 1, Limit))
+| extend T = iff(isnotnull(DueW), DueW, nowW + 1d * todouble(DaysLeft)), Trend = isnull(DueW)
+| extend Lim = replace_regex(replace_regex(Limit, @'\.0 ', ' '), @' \(warning.*$', '')
+| extend Short = case(Item == 'Node disk used', strcat(replace_string(Resource, 'ocp-', ''), ' disk ', Lim), Item has 'pull token', strcat('pull token ', format_datetime(T, 'HH:mm')),
+                      Item startswith 'Password', 'Oracle password', Item has 'certificate', 'ingress cert', Item has 'evaluation', 'Windows eval',
+                      Item == 'Memory used, busiest pod', 'transfer pod RAM', substring(Item, 0, 18)),
+         What = case(Item == 'Node disk used', strcat(Resource, ' disk ', Lim, ': pods evicted'), Item has 'pull token', strcat('image pull token expires ', format_datetime(T, 'HH:mm')),
+                     Item startswith 'Password', strcat('Oracle password expires (', Resource, ')'), Item has 'certificate', 'ingress certificate expires',
+                     Item has 'evaluation', strcat(Resource, ': Windows evaluation ends'), Item == 'Memory used, busiest pod', strcat('transfer pod memory reaches ', Lim),
+                     substring(strcat(Resource, ': ', Item), 0, 44)),
+         C = iff(Status == 'Act', '1', '2'));
+let RB = toscalar(svc | top 3 by T asc | serialize I = row_number()
+| extend P = bag_pack(strcat('r', I, '_d'), '●', strcat('r', I, '_w'), strcat(iff(Trend, '~', ''), fd(T)), strcat('r', I, '_t'), substring(What, 0, 38), strcat('r', I, '_c'), C)
+| summarize make_bag(P));
+let RN = toscalar(svc | count);
+let RD = svc | extend Day = startofday(T) | summarize arg_min(T, Short, C), Nr = count() by Day;
+// ---- NEXT 7 DAYS
+let FB = toscalar(range k from 1 to 7 step 1 | extend Day = todayW + 1d * k
+| extend Fp = iff(isnotnull(Vp) and isnotnull(Sp), Vp + Sp * ((Day + 12h) - nowW) / 1d, real(null))
+| join kind=leftouter RD on Day
+| extend BudOut = Day == todatetime(OUT.s) or Day == todatetime(OUT.p)
+| extend K = case(BudOut, 'out', isnotempty(Short), 'risk', Fp >= 1000, 'rain', Fp >= 800, 'warm', 'clear')
+| extend I = tostring(toint(k))
+| extend P = bag_pack(strcat('f', I, '_n'), fdn(Day), strcat('f', I, '_t'), fdd(Day), strcat('f', I, '_i'), tostring(ICON[K]),
+                      strcat('f', I, '_v'), iff(isnotnull(Fp), strcat('~', th(tolong(round(Fp))), ' ms'), ''),
+                      strcat('f', I, '_w'), case(K == 'out', 'Budget out', K == 'risk', 'Risk due', K == 'rain', 'Slow', K == 'warm', 'Warm', 'Clear'),
+                      strcat('f', I, '_wc'), case(K == 'out', '1', K == 'risk', iff(C == '1', '1', '2'), K == 'rain', '1', K == 'warm', '2', '4'),
+                      strcat('f', I, '_c'), case(K == 'out', '11', K == 'risk', '12', K == 'rain', '11', K == 'warm', '12', '14'),
+                      strcat('f', I, '_r'), case(K == 'out', 'budget used up', isnotempty(Short), Short, 'no known risk due'),
+                      strcat('f', I, '_rc'), case(K == 'out', '1', isnotempty(Short), iff(C == '1', '1', '2'), '5'),
+                      strcat('f', I, '_r2'), case(K == 'out' and isnotempty(Short), Short, Nr > 1, strcat('+', Nr - 1, ' more'), ''))
+| summarize make_bag(P));
+// ---- HEAT ADVISORY (payments speed, the register's speed row)
+let SpSt = tostring(spd.St);
+let WarnD = todatetime(spd.WarnD);
+let LimD = todatetime(spd.LimD);
+let Up = isnotnull(Sp) and Sp > 0.5;
+let HB = bag_pack('h_t', case(isnull(Vp), 'SPEED  ·  no reading yet', Up and SpSt in ('Act', 'Watch'), 'HEAT ADVISORY  ·  speed is creeping up', Up, 'WARMING  ·  speed is rising slowly', 'NO HEAT  ·  speed is steady'),
+                  'h_c', case(isnull(Vp), '5', SpSt == 'Act', '1', Up and SpSt == 'Watch', '2', '4'),
+                  'h_b', case(isnull(Vp), '25', SpSt == 'Act', '21', Up and SpSt == 'Watch', '22', '24'),
+                  'h_1', case(isnull(Vp), 'No payments speed reading in the register yet.', Up, strcat('Payments P95 ', tolong(round(Vp)), ' ms, up about ', tolong(round(Sp)), ' ms a day.'),
+                              strcat('Payments P95 ', tolong(round(Vp)), ' ms, not rising.')),
+                  'h_2', case(isnotnull(WarnD) and isnotnull(LimD), strcat('If it holds: 800 ms ~', fd(WarnD), ', 1 s ~', fd(LimD), '.'),
+                              isnotnull(LimD), strcat('Above the 800 ms warning; 1 s ~', fd(LimD), '.'), 'Still green: no warning date in sight.'),
+                  'h_3', iff(isnotnull(F7) and Up, strcat('faint = in 7 days: ~', th(tolong(round(F7))), ' ms'), 'faint = in 7 days'));
+let TB = toscalar(range i from 1 to 20 step 1 | extend Lo = (i - 1) * 50.0
+| extend C = case(isnotnull(Vp) and Lo < Vp, case(Vp >= 1000, '1', i <= 16, '4', '2'), isnotnull(F7) and Lo < F7, case(F7 >= 1000 and i > 16, '11', i <= 16, '14', '12'), '8')
+| extend P = bag_pack(strcat('t_', tostring(toint(i))), C) | summarize make_bag(P));
+let NONE = iff(RN == 0, bag_pack('r1_t', 'No dated risk to the service in the register', 'r1_c', '5'), dynamic({}));
+let ZERO = dynamic({"now_c":"0","now_h":"","now_w":"","now_i":"","now_s":"","now_sc":"0","now_1":"","now_2":"","now_3":"","d1_k":"0","d1_c":"0","d1_n":"","d1_t":"","d1_i":"","d1_v":"","d1_s":"","d1_r":"","d1_rc":"0","d1_x":"","d1_xc":"0","d2_k":"0","d2_c":"0","d2_n":"","d2_t":"","d2_i":"","d2_v":"","d2_s":"","d2_r":"","d2_rc":"0","d2_x":"","d2_xc":"0","d3_k":"0","d3_c":"0","d3_n":"","d3_t":"","d3_i":"","d3_v":"","d3_s":"","d3_r":"","d3_rc":"0","d3_x":"","d3_xc":"0","d4_k":"0","d4_c":"0","d4_n":"","d4_t":"","d4_i":"","d4_v":"","d4_s":"","d4_r":"","d4_rc":"0","d4_x":"","d4_xc":"0","d5_k":"0","d5_c":"0","d5_n":"","d5_t":"","d5_i":"","d5_v":"","d5_s":"","d5_r":"","d5_rc":"0","d5_x":"","d5_xc":"0","d6_k":"0","d6_c":"0","d6_n":"","d6_t":"","d6_i":"","d6_v":"","d6_s":"","d6_r":"","d6_rc":"0","d6_x":"","d6_xc":"0","d7_k":"0","d7_c":"0","d7_n":"","d7_t":"","d7_i":"","d7_v":"","d7_s":"","d7_r":"","d7_rc":"0","d7_x":"","d7_xc":"0","f1_c":"0","f1_n":"","f1_t":"","f1_i":"","f1_v":"","f1_w":"","f1_wc":"0","f1_r":"","f1_rc":"0","f1_r2":"","f2_c":"0","f2_n":"","f2_t":"","f2_i":"","f2_v":"","f2_w":"","f2_wc":"0","f2_r":"","f2_rc":"0","f2_r2":"","f3_c":"0","f3_n":"","f3_t":"","f3_i":"","f3_v":"","f3_w":"","f3_wc":"0","f3_r":"","f3_rc":"0","f3_r2":"","f4_c":"0","f4_n":"","f4_t":"","f4_i":"","f4_v":"","f4_w":"","f4_wc":"0","f4_r":"","f4_rc":"0","f4_r2":"","f5_c":"0","f5_n":"","f5_t":"","f5_i":"","f5_v":"","f5_w":"","f5_wc":"0","f5_r":"","f5_rc":"0","f5_r2":"","f6_c":"0","f6_n":"","f6_t":"","f6_i":"","f6_v":"","f6_w":"","f6_wc":"0","f6_r":"","f6_rc":"0","f6_r2":"","f7_c":"0","f7_n":"","f7_t":"","f7_i":"","f7_v":"","f7_w":"","f7_wc":"0","f7_r":"","f7_rc":"0","f7_r2":"","bs_l":"","bs_v":"","bs_vc":"0","bs_1":"0","bs_2":"0","bs_3":"0","bs_4":"0","bs_5":"0","bs_6":"0","bs_7":"0","bs_8":"0","bs_9":"0","bs_10":"0","bs_11":"0","bs_12":"0","bs_13":"0","bs_14":"0","bs_15":"0","bs_16":"0","bs_17":"0","bs_18":"0","bs_19":"0","bs_20":"0","bs_s":"","bp_l":"","bp_v":"","bp_vc":"0","bp_1":"0","bp_2":"0","bp_3":"0","bp_4":"0","bp_5":"0","bp_6":"0","bp_7":"0","bp_8":"0","bp_9":"0","bp_10":"0","bp_11":"0","bp_12":"0","bp_13":"0","bp_14":"0","bp_15":"0","bp_16":"0","bp_17":"0","bp_18":"0","bp_19":"0","bp_20":"0","bp_s":"","h_b":"0","h_c":"0","h_t":"","h_1":"","h_2":"","t_1":"0","t_2":"0","t_3":"0","t_4":"0","t_5":"0","t_6":"0","t_7":"0","t_8":"0","t_9":"0","t_10":"0","t_11":"0","t_12":"0","t_13":"0","t_14":"0","t_15":"0","t_16":"0","t_17":"0","t_18":"0","t_19":"0","t_20":"0","h_3":"","r1_d":"","r1_c":"0","r1_w":"","r1_t":"","r2_d":"","r2_c":"0","r2_w":"","r2_t":"","r3_d":"","r3_c":"0","r3_w":"","r3_t":""});
+let DATA = bag_merge(NOWB, DAYB, BUD1, BUD2, FB, HB, TB, RB, NONE);
+print b = bag_merge(DATA, bag_remove_keys(ZERO, bag_keys(DATA)))
+| evaluate bag_unpack(b)

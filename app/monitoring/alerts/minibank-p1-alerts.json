@@ -1,0 +1,117 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "MiniBank v1.4 (P1): log search alerts alr-minibank-failed-value-idr (feature D) and alr-minibank-journey-success-low (feature C). Severity 2, every 5 minutes over 10 minutes, no action group, scope = Application Insights appi-minibank. Queries = monitoring/alerts/*.kql."
+  },
+  "parameters": {
+    "appiId": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource ID of Application Insights appi-minibank (APPI_ID)."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "indonesiacentral",
+      "metadata": {
+        "description": "Region of the alert rules."
+      }
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {
+        "demo": "minibank",
+        "owner": "labadmin",
+        "purpose": "appmon-openshift-demo"
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Insights/scheduledQueryRules",
+      "apiVersion": "2021-08-01",
+      "name": "alr-minibank-failed-value-idr",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]",
+      "kind": "LogAlert",
+      "properties": {
+        "displayName": "alr-minibank-failed-value-idr",
+        "description": "MiniBank failed payment value (HTTP 5xx Transfer + QRIS) >= IDR 100,000,000 in 10 minutes (demo, no notifications)",
+        "severity": 2,
+        "enabled": true,
+        "evaluationFrequency": "PT5M",
+        "windowSize": "PT10M",
+        "scopes": [
+          "[parameters('appiId')]"
+        ],
+        "criteria": {
+          "allOf": [
+            {
+              "query": "requests\n| where cloud_RoleName == \"minibank-api\" and (name endswith \"/api/transfer\" or name endswith \"/api/qris/pay\")\n| where toint(resultCode) >= 500\n| extend FailedValueIdr = todouble(customDimensions[\"minibank.amountIdr\"]) * itemCount\n| project timestamp, FailedValueIdr",
+              "timeAggregation": "Total",
+              "metricMeasureColumn": "FailedValueIdr",
+              "operator": "GreaterThanOrEqual",
+              "threshold": 100000000,
+              "failingPeriods": {
+                "numberOfEvaluationPeriods": 1,
+                "minFailingPeriodsToAlert": 1
+              }
+            }
+          ]
+        },
+        "autoMitigate": true,
+        "actions": {
+          "actionGroups": []
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/scheduledQueryRules",
+      "apiVersion": "2021-08-01",
+      "name": "alr-minibank-journey-success-low",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]",
+      "kind": "LogAlert",
+      "properties": {
+        "displayName": "alr-minibank-journey-success-low",
+        "description": "MiniBank customer-journey success rate below 90 percent with at least 2 failed journeys in 10 minutes (demo, no notifications)",
+        "severity": 2,
+        "enabled": true,
+        "evaluationFrequency": "PT5M",
+        "windowSize": "PT10M",
+        "scopes": [
+          "[parameters('appiId')]"
+        ],
+        "criteria": {
+          "allOf": [
+            {
+              "query": "customEvents\n| where name == \"minibank.journey\" and tostring(customDimensions[\"stage\"]) == \"end\"\n| summarize Journeys = sum(itemCount), FailedJourneys = sumif(itemCount, tostring(customDimensions[\"success\"]) != \"true\")\n| where Journeys > 0\n| extend SuccessPct = round(100.0 * (Journeys - FailedJourneys) / Journeys, 1)\n| where SuccessPct < 90 and FailedJourneys >= 2",
+              "timeAggregation": "Count",
+              "operator": "GreaterThan",
+              "threshold": 0,
+              "failingPeriods": {
+                "numberOfEvaluationPeriods": 1,
+                "minFailingPeriodsToAlert": 1
+              }
+            }
+          ]
+        },
+        "autoMitigate": true,
+        "actions": {
+          "actionGroups": []
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "idrRuleId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Insights/scheduledQueryRules', 'alr-minibank-failed-value-idr')]"
+    },
+    "journeyRuleId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Insights/scheduledQueryRules', 'alr-minibank-journey-success-low')]"
+    }
+  }
+}

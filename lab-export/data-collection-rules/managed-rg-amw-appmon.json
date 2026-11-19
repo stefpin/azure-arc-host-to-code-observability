@@ -1,0 +1,51 @@
+{
+  "dataCollectionEndpointId": "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/MA_amw-appmon_indonesiacentral_managed/providers/Microsoft.Insights/dataCollectionEndpoints/amw-appmon",
+  "dataFlows": [
+    {
+      "destinations": [
+        "MonitoringAccountDestination"
+      ],
+      "streams": [
+        "Microsoft-PrometheusMetrics"
+      ]
+    },
+    {
+      "destinations": [
+        "MonitoringAccountDestination"
+      ],
+      "streams": [
+        "Microsoft-OtelMetrics"
+      ]
+    }
+  ],
+  "dataSources": {
+    "prometheusForwarder": [
+      {
+        "name": "PrometheusDataSource",
+        "streams": [
+          "Microsoft-PrometheusMetrics"
+        ]
+      }
+    ]
+  },
+  "description": "Default DCR created for Monitoring Account",
+  "destinations": {
+    "monitoringAccounts": [
+      {
+        "accountId": "d1b33213-8bd7-5511-bf22-607ac98f4111",
+        "accountResourceId": "/subscriptions/<SUBSCRIPTION_ID>/resourcegroups/rg-appmon-openshift-demo/providers/microsoft.monitor/accounts/amw-appmon",
+        "name": "MonitoringAccountDestination"
+      }
+    ]
+  },
+  "immutableId": "dcr-<IMMUTABLE_ID>",
+  "location": "indonesiacentral",
+  "name": "amw-appmon",
+  "resourceGroup": "MA_amw-appmon_indonesiacentral_managed",
+  "tags": {
+    "demo": "minibank",
+    "owner": "labadmin",
+    "purpose": "appmon-openshift-demo"
+  },
+  "type": "Microsoft.Insights/dataCollectionRules"
+}

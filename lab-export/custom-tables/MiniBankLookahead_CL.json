@@ -1,0 +1,97 @@
+{
+  "name": "MiniBankLookahead_CL",
+  "plan": "Analytics",
+  "retentionInDays": 30,
+  "columns": [
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "TimeGenerated",
+      "type": "datetime"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "RunId",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Kind",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Area",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Resource",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Item",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Value",
+      "type": "real"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Unit",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Limit",
+      "type": "real"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Low",
+      "type": "real"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "High",
+      "type": "real"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "StartUtc",
+      "type": "datetime"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "DueUtc",
+      "type": "datetime"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Text",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Version",
+      "type": "string"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "scene": 5,
+  "writtenUtc": "2026-11-12T08:00:00Z",
+  "phases": [
+    { "scenario": "slow-oracle", "endUtc": "2026-11-12T08:05:00Z" },
+    { "scenario": "fail-oracle", "endUtc": "2026-11-12T08:15:00Z" }
+  ],
+  "writtenBy": "incident.ps1 on HV-HOST-02 (example; the real note is C:\\ProgramData\\MiniBank\\robot\\incident.json on APP-WIN)"
+}

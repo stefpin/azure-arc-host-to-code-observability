@@ -1,0 +1,54 @@
+{
+  "actions": {
+    "actionGroups": [
+      "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/microsoft.insights/actionGroups/ag-appmon-email"
+    ],
+    "customProperties": null
+  },
+  "autoMitigate": true,
+  "checkWorkspaceAlertsStorageConfigured": null,
+  "createdWithApiVersion": "2023-12-01",
+  "criteria": {
+    "allOf": [
+      {
+        "dimensions": null,
+        "failingPeriods": {
+          "minFailingPeriodsToAlert": 1,
+          "numberOfEvaluationPeriods": 1
+        },
+        "metricMeasureColumn": "FailedValueIdr",
+        "metricName": null,
+        "operator": "GreaterThanOrEqual",
+        "query": "requests\n| where cloud_RoleName == \"minibank-api\" and (name endswith \"/api/transfer\" or name endswith \"/api/qris/pay\")\n| where toint(resultCode) >= 500\n| extend FailedValueIdr = todouble(customDimensions[\"minibank.amountIdr\"]) * itemCount\n| project timestamp, FailedValueIdr",
+        "resourceIdColumn": null,
+        "threshold": 100000000.0,
+        "timeAggregation": "Total"
+      }
+    ]
+  },
+  "description": "MiniBank failed payment value (HTTP 5xx Transfer + QRIS) >= IDR 100,000,000 in 10 minutes (demo, no notifications)",
+  "displayName": "alr-minibank-failed-value-idr",
+  "enabled": true,
+  "evaluationFrequency": "0:05:00",
+  "isLegacyLogAnalyticsRule": null,
+  "isWorkspaceAlertsStorageConfigured": null,
+  "kind": "LogAlert",
+  "location": "indonesiacentral",
+  "muteActionsDuration": null,
+  "name": "alr-minibank-failed-value-idr",
+  "overrideQueryTimeRange": null,
+  "resourceGroup": "rg-appmon-openshift-demo",
+  "scopes": [
+    "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.Insights/components/appi-minibank"
+  ],
+  "severity": 2,
+  "skipQueryValidation": null,
+  "tags": {
+    "demo": "minibank",
+    "owner": "labadmin",
+    "purpose": "appmon-openshift-demo"
+  },
+  "targetResourceTypes": null,
+  "type": "Microsoft.Insights/scheduledQueryRules",
+  "windowSize": "0:10:00"
+}

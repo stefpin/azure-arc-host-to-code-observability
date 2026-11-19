@@ -1,0 +1,17 @@
+# Plain HTTP route (lab only): http://minibank-transfer.apps.ocp-minibank.minibank-demo.lab
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: minibank-transfer
+  namespace: minibank
+  labels:
+    app: minibank-transfer
+spec:
+  host: minibank-transfer.apps.ocp-minibank.minibank-demo.lab
+  to:
+    kind: Service
+    name: minibank-transfer
+    weight: 100
+  port:
+    targetPort: http
+  wildcardPolicy: None

@@ -1,0 +1,53 @@
+{
+  "dataCollectionEndpointId": "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.Insights/dataCollectionEndpoints/dce-otlp",
+  "dataFlows": [
+    {
+      "destinations": [
+        "amw"
+      ],
+      "streams": [
+        "Custom-Metrics-Otel"
+      ]
+    },
+    {
+      "destinations": [
+        "law"
+      ],
+      "streams": [
+        "Microsoft-OTel-Logs",
+        "Microsoft-OTel-Traces-Spans",
+        "Microsoft-OTel-Traces-Events",
+        "Microsoft-OTel-Traces-Resources"
+      ]
+    }
+  ],
+  "description": "OTLP traces, logs and metrics from the OpenTelemetry Collector on OpenShift (direct ingestion, P1 B)",
+  "destinations": {
+    "logAnalytics": [
+      {
+        "name": "law",
+        "workspaceId": "<WORKSPACE_ID>",
+        "workspaceResourceId": "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+      }
+    ],
+    "monitoringAccounts": [
+      {
+        "accountId": "d1b33213-8bd7-5511-bf22-607ac98f4111",
+        "accountResourceId": "/subscriptions/<SUBSCRIPTION_ID>/resourcegroups/rg-appmon-openshift-demo/providers/microsoft.monitor/accounts/amw-appmon",
+        "name": "amw"
+      }
+    ]
+  },
+  "immutableId": "dcr-<IMMUTABLE_ID>",
+  "location": "indonesiacentral",
+  "name": "dcr-otlp",
+  "references": {},
+  "resourceGroup": "rg-appmon-openshift-demo",
+  "tags": {
+    "demo": "minibank",
+    "feature": "p1-b-otlp",
+    "owner": "labadmin",
+    "purpose": "appmon-openshift-demo"
+  },
+  "type": "Microsoft.Insights/dataCollectionRules"
+}

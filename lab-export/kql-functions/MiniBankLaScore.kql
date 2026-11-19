@@ -1,0 +1,17 @@
+// MiniBankLaScore  (category: MiniBank Look-ahead; parameters: -)
+// MiniBankLaScore() - Look-ahead v1.0 prediction scorecard. Live = forecasts the collector saved at the start of each 24-hour
+// block (Kind 'forecast' in MiniBankLookahead_CL), checked against what happened. Back-test = the same method applied
+// afterwards to past blocks (labelled as such). Hit = the actual figure fell inside the forecast band.
+let f = materialize(MiniBankLaForecast(8));
+let live = MiniBankLookahead_CL
+| where TimeGenerated > ago(30d) and Kind == 'forecast'
+| summarize arg_max(TimeGenerated, Value, Low, High) by Item, Block = StartUtc
+| join kind=inner (f | where Complete | project Item, B2 = Block, Actual) on $left.Item == $right.Item, $left.Block == $right.B2
+| project Block, Item, Kind = 'Live (saved at the start of the block)', Pred = Value, Low, High, Actual, Hit = Actual >= Low and Actual <= High;
+let back = f
+| where Complete
+| project Block, Item, Kind = 'Back-test (computed afterwards)', Pred, Low, High, Actual, Hit;
+union live, back
+| extend Block = strcat(format_datetime(Block + 7h, 'yyyy-MM-dd HH:mm'), ' WIB + 24 h'), Result = iff(Hit, 'Hit', 'Miss')
+| order by Block desc, Kind asc, Item asc
+| project Kind, Block, Item, Forecast = Pred, Low, High, Actual, Result

@@ -1,0 +1,2032 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "![the bank](https://pustaka.example.com/public-assets/logo.svg) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; **Powered by Azure Arc and Azure Monitor** &nbsp;&nbsp; ![Microsoft](https://aadcdn.msftauth.net/shared/1.0/content/images/microsoft_logo_564db913a7fa0ca42727161c6d031bef.svg)"
+      },
+      "name": "brand-header"
+    },
+    {
+      "type": 1,
+      "name": "la-intro",
+      "content": {
+        "json": "## Look-ahead: what will need attention next\nOne risk register for the MiniBank lab from four lenses: **Capacity** (trend to the limit), **Calendar** (dates that expire), **Posture** (known weaknesses) and **Service** (error budget and speed trend of the business transactions). **Act** = breaks within 7 days, or would break if one part fails; **Watch** = within 30 days, or a known weakness; **Planned** = known and accepted; **OK** = nothing in sight; **Info** = context. History starts 13 Nov 2026 14:00 WIB and lab drills are left out of every trend. The board shows the risks; it fixes nothing. Sources: KQL functions in law-appmon (MiniBankLookahead, MiniBankLaReadings, MiniBankErrorBudget, MiniBankLaScore) and the read-only Look-ahead collector on HV-HOST-02 (hourly; dates and posture daily)."
+      }
+    },
+    {
+      "type": 3,
+      "name": "la-tiles",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "MiniBankLookahead()\n| summarize Risks = count() by Status\n| extend Rank = case(Status == 'Act', 1, Status == 'Watch', 2, Status == 'Planned', 3, Status == 'OK', 4, 5)\n| order by Rank asc\n| project Status, Risks",
+        "size": 4,
+        "title": "Risks by status",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+        ],
+        "visualization": "tiles",
+        "tileSettings": {
+          "titleContent": {
+            "columnMatch": "Status",
+            "formatter": 18,
+            "formatOptions": {
+              "thresholdsOptions": "colors",
+              "thresholdsGrid": [
+                {
+                  "operator": "==",
+                  "thresholdValue": "Act",
+                  "representation": "redBright",
+                  "text": "{0}{1}"
+                },
+                {
+                  "operator": "==",
+                  "thresholdValue": "Watch",
+                  "representation": "orange",
+                  "text": "{0}{1}"
+                },
+                {
+                  "operator": "==",
+                  "thresholdValue": "Planned",
+                  "representation": "blue",
+                  "text": "{0}{1}"
+                },
+                {
+                  "operator": "==",
+                  "thresholdValue": "OK",
+                  "representation": "green",
+                  "text": "{0}{1}"
+                },
+                {
+                  "operator": "==",
+                  "thresholdValue": "Hit",
+                  "representation": "green",
+                  "text": "{0}{1}"
+                },
+                {
+                  "operator": "==",
+                  "thresholdValue": "Miss",
+                  "representation": "redBright",
+                  "text": "{0}{1}"
+                },
+                {
+                  "operator": "Default",
+                  "thresholdValue": null,
+                  "representation": null,
+                  "text": "{0}{1}"
+                }
+              ]
+            }
+          },
+          "leftContent": {
+            "columnMatch": "Risks",
+            "formatter": 12,
+            "formatOptions": {
+              "palette": "auto"
+            }
+          },
+          "showBorder": true
+        }
+      }
+    },
+    {
+      "type": 3,
+      "name": "la-register",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "MiniBankLookahead()",
+        "size": 0,
+        "title": "Risk register (Act, Watch, Planned, OK, Info; then days left)",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+        ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "Status",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "colors",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Act",
+                    "representation": "redBright",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Watch",
+                    "representation": "orange",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Planned",
+                    "representation": "blue",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "OK",
+                    "representation": "green",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Hit",
+                    "representation": "green",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Miss",
+                    "representation": "redBright",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": null,
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "Result",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "colors",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Act",
+                    "representation": "redBright",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Watch",
+                    "representation": "orange",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Planned",
+                    "representation": "blue",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "OK",
+                    "representation": "green",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Hit",
+                    "representation": "green",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Miss",
+                    "representation": "redBright",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": null,
+                    "text": "{0}{1}"
+                  }
+                ]
+              }
+            },
+            {
+              "columnMatch": "Status",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "70px"
+              }
+            },
+            {
+              "columnMatch": "Lens",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "75px"
+              }
+            },
+            {
+              "columnMatch": "Area",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "90px"
+              }
+            },
+            {
+              "columnMatch": "Resource",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "140px"
+              }
+            },
+            {
+              "columnMatch": "Item",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "220px"
+              }
+            },
+            {
+              "columnMatch": "Now",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "90px"
+              }
+            },
+            {
+              "columnMatch": "Limit",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "150px"
+              }
+            },
+            {
+              "columnMatch": "DaysLeft",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "70px"
+              }
+            },
+            {
+              "columnMatch": "Impact",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "320px"
+              }
+            },
+            {
+              "columnMatch": "Action",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "280px"
+              }
+            },
+            {
+              "columnMatch": "Owner",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "100px"
+              }
+            }
+          ],
+          "filter": true,
+          "sortBy": []
+        }
+      }
+    },
+    {
+      "type": 11,
+      "name": "la-tabs",
+      "content": {
+        "version": "LinkItem/1.0",
+        "style": "tabs",
+        "links": [
+          {
+            "id": "la-tab-capacity",
+            "cellValue": "tab",
+            "linkTarget": "parameter",
+            "linkLabel": "Capacity",
+            "subTarget": "capacity",
+            "style": "link"
+          },
+          {
+            "id": "la-tab-calendar",
+            "cellValue": "tab",
+            "linkTarget": "parameter",
+            "linkLabel": "Calendar",
+            "subTarget": "calendar",
+            "style": "link"
+          },
+          {
+            "id": "la-tab-service",
+            "cellValue": "tab",
+            "linkTarget": "parameter",
+            "linkLabel": "Service budget",
+            "subTarget": "service",
+            "style": "link"
+          },
+          {
+            "id": "la-tab-posture",
+            "cellValue": "tab",
+            "linkTarget": "parameter",
+            "linkLabel": "Posture",
+            "subTarget": "posture",
+            "style": "link"
+          },
+          {
+            "id": "la-tab-score",
+            "cellValue": "tab",
+            "linkTarget": "parameter",
+            "linkLabel": "Prediction scorecard",
+            "subTarget": "score",
+            "style": "link"
+          },
+          {
+            "id": "la-tab-collector",
+            "cellValue": "tab",
+            "linkTarget": "parameter",
+            "linkLabel": "Collector",
+            "subTarget": "collector",
+            "style": "link"
+          }
+        ]
+      }
+    },
+    {
+      "type": 12,
+      "name": "la-g-capacity",
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "items": [
+          {
+            "type": 9,
+            "name": "la-metric-param",
+            "content": {
+              "version": "KqlParameterItem/1.0",
+              "parameters": [
+                {
+                  "id": "la-metric",
+                  "version": "KqlParameterItem/1.0",
+                  "name": "Metric",
+                  "label": "Reading",
+                  "type": 2,
+                  "isRequired": true,
+                  "query": "MiniBankLaReadings(7d)\n| summarize by Key = strcat(Area, ' | ', Resource, ' | ', Item)\n| order by Key asc",
+                  "typeSettings": {
+                    "additionalResourceOptions": [],
+                    "showDefault": false
+                  },
+                  "queryType": 0,
+                  "resourceType": "microsoft.operationalinsights/workspaces",
+                  "crossComponentResources": [
+                    "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+                  ],
+                  "value": "Host | HV-HOST-02 | CPU busy (P95 per hour)"
+                }
+              ],
+              "style": "pills",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces"
+            }
+          },
+          {
+            "type": 3,
+            "name": "la-forecast",
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let k = '{Metric}';\nlet r = MiniBankLaReadings(7d) | where strcat(Area, ' | ', Resource, ' | ', Item) == k;\nlet stp = iff(k has 'per day', 1d, 1h);\nlet st = toscalar(r | summarize min(TimeGenerated));\nlet lim = toscalar(r | summarize take_any(coalesce(Limit, Low)));\nr\n| make-series Reading = avg(Value) default = real(null) on TimeGenerated from bin(st, stp) to now() + 7d step stp\n| extend Forecast = series_decompose_forecast(series_fill_linear(Reading), toint(7d / stp))\n| extend Limit = repeat(lim, array_length(Reading))\n| mv-expand TimeGenerated to typeof(datetime), Reading to typeof(real), Forecast to typeof(real), Limit to typeof(real)\n| project TimeGenerated, Reading, ['Trend and forecast'] = Forecast, Limit",
+              "size": 0,
+              "title": "Reading, trend and 7-day forecast (dashed limit where the reading has one)",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+              ],
+              "visualization": "timechart",
+              "chartSettings": {
+                "seriesLabelSettings": [
+                  {
+                    "seriesName": "Limit",
+                    "color": "redBright"
+                  },
+                  {
+                    "seriesName": "Trend and forecast",
+                    "color": "purple"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": 3,
+            "name": "la-capacity",
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "MiniBankLookahead()\n| where Lens == 'Capacity'",
+              "size": 0,
+              "title": "Capacity risks",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+              ],
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "Status",
+                    "formatter": 18,
+                    "formatOptions": {
+                      "thresholdsOptions": "colors",
+                      "thresholdsGrid": [
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Act",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Watch",
+                          "representation": "orange",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Planned",
+                          "representation": "blue",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "OK",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Hit",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Miss",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "Default",
+                          "thresholdValue": null,
+                          "representation": null,
+                          "text": "{0}{1}"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "columnMatch": "Result",
+                    "formatter": 18,
+                    "formatOptions": {
+                      "thresholdsOptions": "colors",
+                      "thresholdsGrid": [
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Act",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Watch",
+                          "representation": "orange",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Planned",
+                          "representation": "blue",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "OK",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Hit",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Miss",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "Default",
+                          "thresholdValue": null,
+                          "representation": null,
+                          "text": "{0}{1}"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "columnMatch": "Status",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "70px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Lens",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "75px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Area",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "90px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Resource",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "140px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Item",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "220px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Now",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "90px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Limit",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "150px"
+                    }
+                  },
+                  {
+                    "columnMatch": "DaysLeft",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "70px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Impact",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "320px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Action",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "280px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Owner",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "100px"
+                    }
+                  }
+                ],
+                "filter": true,
+                "sortBy": []
+              }
+            }
+          },
+          {
+            "type": 1,
+            "name": "la-capacity-note",
+            "content": {
+              "json": "*How to read:* the trend is a straight line through the readings of up to 7 days; days left = (limit - now) / trend per day. Too little history means the collector started recently: the row is judged on its level only until a full day of readings exists. OpenShift 'Spare ... if this node fails' adds up the free requests on the other ready nodes and subtracts the movable pods of that node (pod placement rules ignored)."
+            }
+          }
+        ]
+      },
+      "conditionalVisibility": {
+        "parameterName": "tab",
+        "comparison": "isEqualTo",
+        "value": "capacity"
+      }
+    },
+    {
+      "type": 12,
+      "name": "la-g-calendar",
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "items": [
+          {
+            "type": 3,
+            "name": "la-calendar",
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "MiniBankLookahead()\n| where Lens == 'Calendar'\n| order by DaysLeft asc\n| project Status, Item, Resource, Due = Limit, DaysLeft, Impact, Action, Owner, Basis",
+              "size": 0,
+              "title": "Dates that will bite",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+              ],
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "Status",
+                    "formatter": 18,
+                    "formatOptions": {
+                      "thresholdsOptions": "colors",
+                      "thresholdsGrid": [
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Act",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Watch",
+                          "representation": "orange",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Planned",
+                          "representation": "blue",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "OK",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Hit",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Miss",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "Default",
+                          "thresholdValue": null,
+                          "representation": null,
+                          "text": "{0}{1}"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "columnMatch": "Result",
+                    "formatter": 18,
+                    "formatOptions": {
+                      "thresholdsOptions": "colors",
+                      "thresholdsGrid": [
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Act",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Watch",
+                          "representation": "orange",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Planned",
+                          "representation": "blue",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "OK",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Hit",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Miss",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "Default",
+                          "thresholdValue": null,
+                          "representation": null,
+                          "text": "{0}{1}"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "columnMatch": "Status",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "70px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Item",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "230px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Resource",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "170px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Due",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "180px"
+                    }
+                  },
+                  {
+                    "columnMatch": "DaysLeft",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "70px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Impact",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "330px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Action",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "300px"
+                    }
+                  }
+                ],
+                "filter": true,
+                "sortBy": []
+              }
+            }
+          },
+          {
+            "type": 3,
+            "name": "la-calendar-chart",
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "MiniBankLookahead()\n| where Lens == 'Calendar'\n| project Item = strcat(Item, ' (', Resource, ')'), DaysLeft = min_of(DaysLeft, 400.0)\n| order by DaysLeft asc",
+              "size": 0,
+              "title": "Days left (capped at 400)",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+              ],
+              "visualization": "barchart"
+            }
+          }
+        ]
+      },
+      "conditionalVisibility": {
+        "parameterName": "tab",
+        "comparison": "isEqualTo",
+        "value": "calendar"
+      }
+    },
+    {
+      "type": 12,
+      "name": "la-g-service",
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "items": [
+          {
+            "type": 3,
+            "name": "la-budget",
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "MiniBankErrorBudget(7d)",
+              "size": 0,
+              "title": "Error budget (targets agreed 16 Nov 2026)",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+              ],
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "Status",
+                    "formatter": 18,
+                    "formatOptions": {
+                      "thresholdsOptions": "colors",
+                      "thresholdsGrid": [
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Act",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Watch",
+                          "representation": "orange",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Planned",
+                          "representation": "blue",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "OK",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Hit",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Miss",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "Default",
+                          "thresholdValue": null,
+                          "representation": null,
+                          "text": "{0}{1}"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "columnMatch": "Result",
+                    "formatter": 18,
+                    "formatOptions": {
+                      "thresholdsOptions": "colors",
+                      "thresholdsGrid": [
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Act",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Watch",
+                          "representation": "orange",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Planned",
+                          "representation": "blue",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "OK",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Hit",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Miss",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "Default",
+                          "thresholdValue": null,
+                          "representation": null,
+                          "text": "{0}{1}"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "columnMatch": "Objective",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "100px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Target",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "120px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Status",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "70px"
+                    }
+                  }
+                ],
+                "filter": true,
+                "sortBy": []
+              }
+            }
+          },
+          {
+            "type": 3,
+            "name": "la-burn",
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let st = max_of(ago(7d), datetime(2026-11-13T07:00:00Z));\nlet dm = MiniBankDrillMinutes(st);\nAppRequests\n| where TimeGenerated > st and AppRoleName == 'minibank-api' and (Name endswith '/api/transfer' or Name endswith '/api/qris/pay' or Name endswith '/statement')\n| extend T = bin(TimeGenerated, 1m)\n| join kind=leftanti dm on T\n| summarize ['Failed %'] = 100.0 * sumif(ItemCount, toint(ResultCode) >= 500) / sum(ItemCount), ['Slower than 1 s %'] = 100.0 * sumif(ItemCount, DurationMs > 1000) / sum(ItemCount) by bin(TimeGenerated, 1h)\n| extend ['Allowed failed 0.5 %'] = 0.5, ['Allowed slow 5 %'] = 5.0\n| order by TimeGenerated asc",
+              "size": 0,
+              "title": "Failed and slow business transactions per hour (drills left out)",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+              ],
+              "visualization": "timechart"
+            }
+          },
+          {
+            "type": 1,
+            "name": "la-budget-note",
+            "content": {
+              "json": "*How to read:* the budget is the number of failed (or slower than 1 s) business transactions the target allows in the window. Burn rate 1x uses it exactly as fast as it is earned; days to zero is shown only when the last 24 hours use more than they earn."
+            }
+          },
+          {
+            "type": 3,
+            "name": "la-speed-risks",
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "MiniBankLookahead()\n| where Lens == 'Service'",
+              "size": 0,
+              "title": "Service risks: error budget and speed trend (P95 warning 800 ms, limit 1000 ms)",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+              ],
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "Status",
+                    "formatter": 18,
+                    "formatOptions": {
+                      "thresholdsOptions": "colors",
+                      "thresholdsGrid": [
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Act",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Watch",
+                          "representation": "orange",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Planned",
+                          "representation": "blue",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "OK",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Hit",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Miss",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "Default",
+                          "thresholdValue": null,
+                          "representation": null,
+                          "text": "{0}{1}"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "columnMatch": "Result",
+                    "formatter": 18,
+                    "formatOptions": {
+                      "thresholdsOptions": "colors",
+                      "thresholdsGrid": [
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Act",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Watch",
+                          "representation": "orange",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Planned",
+                          "representation": "blue",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "OK",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Hit",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Miss",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "Default",
+                          "thresholdValue": null,
+                          "representation": null,
+                          "text": "{0}{1}"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "columnMatch": "Status",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "70px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Lens",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "75px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Area",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "90px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Resource",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "140px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Item",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "220px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Now",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "90px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Limit",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "150px"
+                    }
+                  },
+                  {
+                    "columnMatch": "DaysLeft",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "70px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Impact",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "320px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Action",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "280px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Owner",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "100px"
+                    }
+                  }
+                ],
+                "filter": true,
+                "sortBy": []
+              }
+            }
+          },
+          {
+            "type": 3,
+            "name": "la-speed-chart",
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let r = materialize(MiniBankLaReadings(7d)\n| where  Item startswith 'Business transactions P95'\n| extend x = (TimeGenerated - now()) / 1d);\nlet s = materialize(r\n| summarize n = count(), sx = sum(x), sy = sum(Value), sxx = sum(x * x), sxy = sum(x * Value)\n| extend b = (n * sxy - sx * sy) / (n * sxx - sx * sx)\n| extend a = (sy - b * sx) / n);\nlet a = toscalar(s | project a);\nlet b = toscalar(s | project b);\nr\n| project TimeGenerated, ['P95 per hour'] = Value, ['Trend (straight line)'] = a + b * x, ['Warning 800 ms'] = 800.0, ['Limit 1000 ms'] = 1000.0\n| order by TimeGenerated asc",
+              "size": 0,
+              "title": "Business transactions P95 per hour (ms): warning 800 ms, limit 1000 ms (drills left out)",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+              ],
+              "visualization": "timechart",
+              "chartSettings": {
+                "seriesLabelSettings": [
+                  {
+                    "seriesName": "P95 per hour",
+                    "color": "blue"
+                  },
+                  {
+                    "seriesName": "Trend (straight line)",
+                    "color": "purple"
+                  },
+                  {
+                    "seriesName": "Warning 800 ms",
+                    "color": "orange"
+                  },
+                  {
+                    "seriesName": "Limit 1000 ms",
+                    "color": "redBright"
+                  }
+                ],
+                "ySettings": {
+                  "min": 0
+                },
+                "showMetrics": false,
+                "showLegend": true
+              }
+            }
+          },
+          {
+            "type": 1,
+            "name": "la-speed-note",
+            "content": {
+              "json": "*How to read the speed trend:* P95 = 95 % of the business transactions (transfer, QRIS payment, statement) finish faster than this; lab drills are left out. The purple line is a straight-line trend through the hourly readings. **Watch** when the trend reaches the 800 ms warning within 30 days; **Act** when it reaches the 1000 ms limit within 7 days (the '95 % under 1 s' target). The register row gives both dates."
+            }
+          }
+        ]
+      },
+      "conditionalVisibility": {
+        "parameterName": "tab",
+        "comparison": "isEqualTo",
+        "value": "service"
+      }
+    },
+    {
+      "type": 12,
+      "name": "la-g-posture",
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "items": [
+          {
+            "type": 3,
+            "name": "la-posture",
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "MiniBankLookahead()\n| where Lens == 'Posture'\n| project Status, Area, Resource, Item, Now, Limit, Impact, Action, Basis",
+              "size": 0,
+              "title": "Known weaknesses (shown, not fixed)",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+              ],
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "Status",
+                    "formatter": 18,
+                    "formatOptions": {
+                      "thresholdsOptions": "colors",
+                      "thresholdsGrid": [
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Act",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Watch",
+                          "representation": "orange",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Planned",
+                          "representation": "blue",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "OK",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Hit",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Miss",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "Default",
+                          "thresholdValue": null,
+                          "representation": null,
+                          "text": "{0}{1}"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "columnMatch": "Result",
+                    "formatter": 18,
+                    "formatOptions": {
+                      "thresholdsOptions": "colors",
+                      "thresholdsGrid": [
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Act",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Watch",
+                          "representation": "orange",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Planned",
+                          "representation": "blue",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "OK",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Hit",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Miss",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "Default",
+                          "thresholdValue": null,
+                          "representation": null,
+                          "text": "{0}{1}"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "columnMatch": "Status",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "70px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Area",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "90px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Resource",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "150px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Item",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "210px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Now",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "90px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Limit",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "110px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Impact",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "280px"
+                    }
+                  }
+                ],
+                "filter": true,
+                "sortBy": []
+              }
+            }
+          },
+          {
+            "type": 3,
+            "name": "la-defender",
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "securityresources\n| where type == 'microsoft.security/assessments' and tolower(id) contains '/resourcegroups/rg-appmon-openshift-demo/'\n| where tostring(properties.status.code) == 'Unhealthy'\n| summarize Findings = count(), Recommendations = dcount(tostring(properties.displayName)) by Severity = tostring(properties.metadata.severity)\n| order by Findings desc",
+              "size": 0,
+              "title": "Defender for Cloud: open findings in the demo resource group (live)",
+              "queryType": 1,
+              "resourceType": "microsoft.resourcegraph/resources",
+              "crossComponentResources": [
+                "/subscriptions/<SUBSCRIPTION_ID>"
+              ],
+              "visualization": "table"
+            }
+          },
+          {
+            "type": 3,
+            "name": "la-advisor",
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "advisorresources\n| where type == 'microsoft.advisor/recommendations' and tolower(tostring(properties.resourceMetadata.resourceId)) contains '/resourcegroups/rg-appmon-openshift-demo/'\n| summarize Recommendations = count() by Category = tostring(properties.category), Impact = tostring(properties.impact)\n| order by Recommendations desc",
+              "size": 0,
+              "title": "Azure Advisor recommendations (live)",
+              "queryType": 1,
+              "resourceType": "microsoft.resourcegraph/resources",
+              "crossComponentResources": [
+                "/subscriptions/<SUBSCRIPTION_ID>"
+              ],
+              "visualization": "table"
+            }
+          },
+          {
+            "type": 3,
+            "name": "la-policy",
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "policyresources\n| where type == 'microsoft.policyinsights/policystates' and tolower(tostring(properties.resourceGroup)) == 'rg-appmon-openshift-demo'\n| summarize NonCompliantResources = dcountif(tostring(properties.resourceId), tostring(properties.complianceState) == 'NonCompliant'), Policies = dcountif(tostring(properties.policyDefinitionId), tostring(properties.complianceState) == 'NonCompliant'), Resources = dcount(tostring(properties.resourceId))",
+              "size": 0,
+              "title": "Azure Policy compliance (live)",
+              "queryType": 1,
+              "resourceType": "microsoft.resourcegraph/resources",
+              "crossComponentResources": [
+                "/subscriptions/<SUBSCRIPTION_ID>"
+              ],
+              "visualization": "table"
+            }
+          },
+          {
+            "type": 3,
+            "name": "la-posture-trend",
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "MiniBankLookahead_CL\n| where TimeGenerated > ago(30d) and Kind == 'posture'\n| summarize Value = max(Value) by Day = bin(TimeGenerated + 7h, 1d), Item = strcat(Resource, ': ', Item)\n| order by Day asc",
+              "size": 0,
+              "title": "Posture trend (daily readings)",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+              ],
+              "visualization": "linechart"
+            }
+          }
+        ]
+      },
+      "conditionalVisibility": {
+        "parameterName": "tab",
+        "comparison": "isEqualTo",
+        "value": "posture"
+      }
+    },
+    {
+      "type": 12,
+      "name": "la-g-score",
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "items": [
+          {
+            "type": 3,
+            "name": "la-score-tiles",
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "MiniBankLaScore()\n| summarize Hits = countif(Result == 'Hit'), Checked = count() by Kind\n| extend HitRate = strcat(round(100.0 * Hits / Checked, 0), ' %')",
+              "size": 4,
+              "title": "Hit rate",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+              ],
+              "visualization": "tiles",
+              "tileSettings": {
+                "titleContent": {
+                  "columnMatch": "Kind",
+                  "formatter": 1
+                },
+                "leftContent": {
+                  "columnMatch": "HitRate",
+                  "formatter": 1
+                },
+                "secondaryContent": {
+                  "columnMatch": "Checked",
+                  "formatter": 1
+                },
+                "showBorder": true
+              }
+            }
+          },
+          {
+            "type": 3,
+            "name": "la-score",
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "MiniBankLaScore()",
+              "size": 0,
+              "title": "Forecast checks (Hit = the actual figure fell inside the forecast band)",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+              ],
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "Status",
+                    "formatter": 18,
+                    "formatOptions": {
+                      "thresholdsOptions": "colors",
+                      "thresholdsGrid": [
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Act",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Watch",
+                          "representation": "orange",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Planned",
+                          "representation": "blue",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "OK",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Hit",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Miss",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "Default",
+                          "thresholdValue": null,
+                          "representation": null,
+                          "text": "{0}{1}"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "columnMatch": "Result",
+                    "formatter": 18,
+                    "formatOptions": {
+                      "thresholdsOptions": "colors",
+                      "thresholdsGrid": [
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Act",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Watch",
+                          "representation": "orange",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Planned",
+                          "representation": "blue",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "OK",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Hit",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Miss",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "Default",
+                          "thresholdValue": null,
+                          "representation": null,
+                          "text": "{0}{1}"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "columnMatch": "Kind",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "220px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Block",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "180px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Item",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "280px"
+                    }
+                  }
+                ],
+                "filter": true,
+                "sortBy": []
+              }
+            }
+          },
+          {
+            "type": 1,
+            "name": "la-score-note",
+            "content": {
+              "json": "*How to read:* every day at 10:00 WIB the collector saves a forecast for the next 24 hours (trend through the previous days, band +/-15 % or +/-2 standard errors). Live rows are those saved forecasts checked against what happened; back-test rows apply the same method afterwards to earlier days and are labelled as such."
+            }
+          }
+        ]
+      },
+      "conditionalVisibility": {
+        "parameterName": "tab",
+        "comparison": "isEqualTo",
+        "value": "score"
+      }
+    },
+    {
+      "type": 12,
+      "name": "la-g-collector",
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "items": [
+          {
+            "type": 3,
+            "name": "la-collector",
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "MiniBankLookahead_CL\n| where TimeGenerated > ago(3d) and Kind == 'collector'\n| project TimeWIB = format_datetime(TimeGenerated + 7h, 'yyyy-MM-dd HH:mm'), Seconds = round(Value, 0), Text\n| order by TimeWIB desc\n| take 72",
+              "size": 0,
+              "title": "Collector runs (HV-HOST-02, hourly at :05; skips during lab drills)",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+              ],
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "Status",
+                    "formatter": 18,
+                    "formatOptions": {
+                      "thresholdsOptions": "colors",
+                      "thresholdsGrid": [
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Act",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Watch",
+                          "representation": "orange",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Planned",
+                          "representation": "blue",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "OK",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Hit",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Miss",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "Default",
+                          "thresholdValue": null,
+                          "representation": null,
+                          "text": "{0}{1}"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "columnMatch": "Result",
+                    "formatter": 18,
+                    "formatOptions": {
+                      "thresholdsOptions": "colors",
+                      "thresholdsGrid": [
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Act",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Watch",
+                          "representation": "orange",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Planned",
+                          "representation": "blue",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "OK",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Hit",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Miss",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "Default",
+                          "thresholdValue": null,
+                          "representation": null,
+                          "text": "{0}{1}"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "columnMatch": "TimeWIB",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "130px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Seconds",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "70px"
+                    }
+                  }
+                ],
+                "filter": true,
+                "sortBy": []
+              }
+            }
+          },
+          {
+            "type": 3,
+            "name": "la-rows",
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "MiniBankLookahead_CL\n| where TimeGenerated > ago(2h)\n| summarize arg_max(TimeGenerated, Value, Unit, Limit, Low, DueUtc, Text) by Kind, Area, Resource, Item\n| order by Kind asc, Area asc, Resource asc, Item asc",
+              "size": 0,
+              "title": "Latest collector readings",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+              ],
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "Status",
+                    "formatter": 18,
+                    "formatOptions": {
+                      "thresholdsOptions": "colors",
+                      "thresholdsGrid": [
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Act",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Watch",
+                          "representation": "orange",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Planned",
+                          "representation": "blue",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "OK",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Hit",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Miss",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "Default",
+                          "thresholdValue": null,
+                          "representation": null,
+                          "text": "{0}{1}"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "columnMatch": "Result",
+                    "formatter": 18,
+                    "formatOptions": {
+                      "thresholdsOptions": "colors",
+                      "thresholdsGrid": [
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Act",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Watch",
+                          "representation": "orange",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Planned",
+                          "representation": "blue",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "OK",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Hit",
+                          "representation": "green",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Miss",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "Default",
+                          "thresholdValue": null,
+                          "representation": null,
+                          "text": "{0}{1}"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "columnMatch": "Kind",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "80px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Area",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "90px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Resource",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "150px"
+                    }
+                  },
+                  {
+                    "columnMatch": "Item",
+                    "formatter": 0,
+                    "formatOptions": {
+                      "customColumnWidthSetting": "220px"
+                    }
+                  }
+                ],
+                "filter": true,
+                "sortBy": []
+              }
+            }
+          }
+        ]
+      },
+      "conditionalVisibility": {
+        "parameterName": "tab",
+        "comparison": "isEqualTo",
+        "value": "collector"
+      }
+    }
+  ],
+  "fallbackResourceIds": [
+    "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+  ],
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

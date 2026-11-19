@@ -1,0 +1,55 @@
+{
+  "name": "MiniBankDbSnap_CL",
+  "plan": "Analytics",
+  "retentionInDays": 30,
+  "columns": [
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "TimeGenerated",
+      "type": "dateTime"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Computer",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "FilePath",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "DbEngine",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "SnapshotType",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Name",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Value",
+      "type": "real"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Detail",
+      "type": "string"
+    }
+  ]
+}

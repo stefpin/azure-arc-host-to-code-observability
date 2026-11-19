@@ -1,0 +1,104 @@
+{
+  "dataFlows": [
+    {
+      "destinations": [
+        "law"
+      ],
+      "outputStream": "Custom-MiniBankLookahead_CL",
+      "streams": [
+        "Custom-MiniBankLookahead"
+      ],
+      "transformKql": "source"
+    }
+  ],
+  "description": "MiniBank Look-ahead: rows from the read-only collector on HV-HOST-02 (capacity hourly; calendar, posture and forecast daily)",
+  "destinations": {
+    "logAnalytics": [
+      {
+        "name": "law",
+        "workspaceId": "<WORKSPACE_ID>",
+        "workspaceResourceId": "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+      }
+    ]
+  },
+  "endpoints": {
+    "logsIngestion": "https://dcr-minibank-lookahead-xx0c-indonesiacentral.logs.z1.ingest.monitor.azure.com",
+    "metricsIngestion": "https://dcr-minibank-lookahead-bpyu-indonesiacentral.metrics.z1.ingest.monitor.azure.com"
+  },
+  "immutableId": "dcr-<IMMUTABLE_ID>",
+  "kind": "Direct",
+  "location": "indonesiacentral",
+  "name": "dcr-minibank-lookahead",
+  "resourceGroup": "rg-appmon-openshift-demo",
+  "streamDeclarations": {
+    "Custom-MiniBankLookahead": {
+      "columns": [
+        {
+          "name": "TimeGenerated",
+          "type": "datetime"
+        },
+        {
+          "name": "RunId",
+          "type": "string"
+        },
+        {
+          "name": "Kind",
+          "type": "string"
+        },
+        {
+          "name": "Area",
+          "type": "string"
+        },
+        {
+          "name": "Resource",
+          "type": "string"
+        },
+        {
+          "name": "Item",
+          "type": "string"
+        },
+        {
+          "name": "Value",
+          "type": "real"
+        },
+        {
+          "name": "Unit",
+          "type": "string"
+        },
+        {
+          "name": "Limit",
+          "type": "real"
+        },
+        {
+          "name": "Low",
+          "type": "real"
+        },
+        {
+          "name": "High",
+          "type": "real"
+        },
+        {
+          "name": "StartUtc",
+          "type": "datetime"
+        },
+        {
+          "name": "DueUtc",
+          "type": "datetime"
+        },
+        {
+          "name": "Text",
+          "type": "string"
+        },
+        {
+          "name": "Version",
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "tags": {
+    "Project": "MiniBank-demo",
+    "Purpose": "look-ahead"
+  },
+  "type": "Microsoft.Insights/dataCollectionRules"
+}

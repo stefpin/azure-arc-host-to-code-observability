@@ -1,0 +1,54 @@
+{
+  "actions": {
+    "actionGroups": [
+      "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/microsoft.insights/actionGroups/ag-appmon-email"
+    ],
+    "customProperties": null
+  },
+  "autoMitigate": true,
+  "checkWorkspaceAlertsStorageConfigured": false,
+  "createdWithApiVersion": "2023-12-01",
+  "criteria": {
+    "allOf": [
+      {
+        "dimensions": [],
+        "failingPeriods": {
+          "minFailingPeriodsToAlert": 1,
+          "numberOfEvaluationPeriods": 1
+        },
+        "metricMeasureColumn": null,
+        "metricName": null,
+        "operator": "GreaterThan",
+        "query": "KubeNodeInventory | summarize arg_max(TimeGenerated, Status) by Computer | where Status != \"Ready\"",
+        "resourceIdColumn": null,
+        "threshold": 0.0,
+        "timeAggregation": "Count"
+      }
+    ]
+  },
+  "description": "OpenShift node not ready (demo, no notifications)",
+  "displayName": null,
+  "enabled": true,
+  "evaluationFrequency": "0:05:00",
+  "isLegacyLogAnalyticsRule": null,
+  "isWorkspaceAlertsStorageConfigured": null,
+  "kind": null,
+  "location": "indonesiacentral",
+  "muteActionsDuration": null,
+  "name": "alr-ocp-node-not-ready",
+  "overrideQueryTimeRange": null,
+  "resourceGroup": "rg-appmon-openshift-demo",
+  "scopes": [
+    "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+  ],
+  "severity": 1,
+  "skipQueryValidation": false,
+  "tags": {
+    "demo": "minibank",
+    "owner": "labadmin",
+    "purpose": "appmon-openshift-demo"
+  },
+  "targetResourceTypes": null,
+  "type": "Microsoft.Insights/scheduledQueryRules",
+  "windowSize": "0:05:00"
+}

@@ -1,0 +1,54 @@
+{
+  "actions": {
+    "actionGroups": [
+      "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/microsoft.insights/actionGroups/ag-appmon-email"
+    ],
+    "customProperties": null
+  },
+  "autoMitigate": true,
+  "checkWorkspaceAlertsStorageConfigured": null,
+  "createdWithApiVersion": "2023-12-01",
+  "criteria": {
+    "allOf": [
+      {
+        "dimensions": null,
+        "failingPeriods": {
+          "minFailingPeriodsToAlert": 1,
+          "numberOfEvaluationPeriods": 1
+        },
+        "metricMeasureColumn": null,
+        "metricName": null,
+        "operator": "GreaterThan",
+        "query": "customEvents\n| where name == \"minibank.journey\" and tostring(customDimensions[\"stage\"]) == \"end\"\n| summarize Journeys = sum(itemCount), FailedJourneys = sumif(itemCount, tostring(customDimensions[\"success\"]) != \"true\")\n| where Journeys > 0\n| extend SuccessPct = round(100.0 * (Journeys - FailedJourneys) / Journeys, 1)\n| where SuccessPct < 90 and FailedJourneys >= 2",
+        "resourceIdColumn": null,
+        "threshold": 0.0,
+        "timeAggregation": "Count"
+      }
+    ]
+  },
+  "description": "MiniBank customer-journey success rate below 90 percent with at least 2 failed journeys in 10 minutes (demo, no notifications)",
+  "displayName": "alr-minibank-journey-success-low",
+  "enabled": true,
+  "evaluationFrequency": "0:05:00",
+  "isLegacyLogAnalyticsRule": null,
+  "isWorkspaceAlertsStorageConfigured": null,
+  "kind": "LogAlert",
+  "location": "indonesiacentral",
+  "muteActionsDuration": null,
+  "name": "alr-minibank-journey-success-low",
+  "overrideQueryTimeRange": null,
+  "resourceGroup": "rg-appmon-openshift-demo",
+  "scopes": [
+    "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.Insights/components/appi-minibank"
+  ],
+  "severity": 2,
+  "skipQueryValidation": null,
+  "tags": {
+    "demo": "minibank",
+    "owner": "labadmin",
+    "purpose": "appmon-openshift-demo"
+  },
+  "targetResourceTypes": null,
+  "type": "Microsoft.Insights/scheduledQueryRules",
+  "windowSize": "0:10:00"
+}

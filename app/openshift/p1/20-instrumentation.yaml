@@ -1,0 +1,23 @@
+# Zero-code Java onboarding for namespace minibank: pods annotated with
+#   instrumentation.opentelemetry.io/inject-java: "true"
+# get the OpenTelemetry Java agent injected (init container + JAVA_TOOL_OPTIONS) by the Red Hat build of OpenTelemetry operator.
+apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: minibank-java
+  namespace: minibank
+  labels: {demo: minibank}
+spec:
+  exporter:
+    endpoint: http://otelcol.minibank-otel.svc.cluster.local:4318
+  propagators:
+    - tracecontext
+    - baggage
+  sampler:
+    type: parentbased_always_on
+  java:
+    env:
+      - name: OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
+        value: delta
+      - name: OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION
+        value: base2_exponential_bucket_histogram

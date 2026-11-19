@@ -1,0 +1,29 @@
+// MiniBankLaForecast  (category: MiniBank Look-ahead; parameters: days:int=8)
+// MiniBankLaForecast(days:int=8) - Look-ahead v1.0 day-ahead forecast per item: for each 24-hour block (from 10:00 WIB) a
+// prediction from the trend line through the previous complete blocks (up to 7, at least 3), with a band of +/-15 % or
+// +/-2 standard errors, whichever is wider. Complete blocks give the back-test (Hit = the actual figure inside the band).
+let cur = bin(now() - 3h, 1d) + 3h;
+let dd = materialize(MiniBankLaDaily(days + 8));
+let items = dd | distinct Item | extend k = 1;
+let blocks = range Block from cur - days * 1d to cur step 1d | extend k = 1;
+let targets = items
+| join kind=inner blocks on k
+| project Item, Block
+| join kind=leftouter (dd | project Item, B2 = Block, Actual, Complete) on $left.Item == $right.Item, $left.Block == $right.B2
+| project Item, Block, Actual, Complete = coalesce(Complete, false);
+let hist = dd | where Complete | project Item, HB = Block, Y = Actual;
+targets
+| join kind=inner hist on Item
+| where HB < Block and HB >= Block - 7d
+| extend x = (HB - Block) / 1d
+| summarize n = count(), sx = sum(x), sy = sum(Y), sxx = sum(x * x), sxy = sum(x * Y), syy = sum(Y * Y) by Item, Block, Actual, Complete
+| where n >= 3
+| extend den = n * sxx - sx * sx
+| extend b = iff(den > 0, (n * sxy - sx * sy) / den, 0.0)
+| extend a = (sy - b * sx) / n
+| extend se = iff(n > 2, sqrt(max_of(syy - a * sy - b * sxy, 0.0) / (n - 2)), 0.0)
+| extend Pred = max_of(a, 0.0)
+| extend Band = max_of(0.15 * Pred, 2.0 * se)
+| extend Low = max_of(Pred - Band, 0.0), High = Pred + Band
+| extend Hit = iff(Complete, Actual >= Low and Actual <= High, bool(null))
+| project Block, Item, Pred = round(Pred, 3), Low = round(Low, 3), High = round(High, 3), Actual = round(Actual, 3), Complete, Hit, n

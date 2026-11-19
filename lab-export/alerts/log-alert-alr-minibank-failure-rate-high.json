@@ -1,0 +1,54 @@
+{
+  "actions": {
+    "actionGroups": [
+      "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/microsoft.insights/actionGroups/ag-appmon-email"
+    ],
+    "customProperties": null
+  },
+  "autoMitigate": true,
+  "checkWorkspaceAlertsStorageConfigured": false,
+  "createdWithApiVersion": "2023-12-01",
+  "criteria": {
+    "allOf": [
+      {
+        "dimensions": [],
+        "failingPeriods": {
+          "minFailingPeriodsToAlert": 1,
+          "numberOfEvaluationPeriods": 1
+        },
+        "metricMeasureColumn": null,
+        "metricName": null,
+        "operator": "GreaterThan",
+        "query": "AppRequests | where AppRoleName == \"minibank-api\" and Name startswith \"POST /api/\" | summarize Total = count(), Failed = countif(toint(ResultCode) >= 500) | extend FailureRatePct = iff(Total == 0, 0.0, 100.0 * Failed / Total) | where Total >= 5 and FailureRatePct > 2",
+        "resourceIdColumn": null,
+        "threshold": 0.0,
+        "timeAggregation": "Count"
+      }
+    ]
+  },
+  "description": "Technical failures (HTTP 5xx) above 2 percent of POST /api/ requests on minibank-api in 5 minutes (at least 5 requests). Business declines (HTTP 409 Insufficient balance) are not failures. Demo lab, no notifications.",
+  "displayName": null,
+  "enabled": true,
+  "evaluationFrequency": "0:05:00",
+  "isLegacyLogAnalyticsRule": null,
+  "isWorkspaceAlertsStorageConfigured": null,
+  "kind": null,
+  "location": "indonesiacentral",
+  "muteActionsDuration": null,
+  "name": "alr-minibank-failure-rate-high",
+  "overrideQueryTimeRange": null,
+  "resourceGroup": "rg-appmon-openshift-demo",
+  "scopes": [
+    "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+  ],
+  "severity": 2,
+  "skipQueryValidation": false,
+  "tags": {
+    "demo": "minibank",
+    "owner": "labadmin",
+    "purpose": "appmon-openshift-demo"
+  },
+  "targetResourceTypes": null,
+  "type": "Microsoft.Insights/scheduledQueryRules",
+  "windowSize": "0:05:00"
+}

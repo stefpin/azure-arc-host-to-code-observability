@@ -1,0 +1,17 @@
+{
+  "properties": {
+    "schema": {
+      "name": "MiniBankDbSnap_CL",
+      "columns": [
+        { "name": "TimeGenerated", "type": "dateTime" },
+        { "name": "Computer", "type": "string" },
+        { "name": "FilePath", "type": "string" },
+        { "name": "DbEngine", "type": "string" },
+        { "name": "SnapshotType", "type": "string" },
+        { "name": "Name", "type": "string" },
+        { "name": "Value", "type": "real" },
+        { "name": "Detail", "type": "string" }
+      ]
+    }
+  }
+}

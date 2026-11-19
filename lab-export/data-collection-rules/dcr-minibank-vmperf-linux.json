@@ -1,0 +1,49 @@
+{
+  "dataFlows": [
+    {
+      "destinations": [
+        "law"
+      ],
+      "streams": [
+        "Microsoft-Perf"
+      ]
+    }
+  ],
+  "dataSources": {
+    "performanceCounters": [
+      {
+        "counterSpecifiers": [
+          "\\Processor(*)\\% Processor Time",
+          "\\Memory(*)\\% Used Memory",
+          "\\Memory(*)\\Available MBytes Memory",
+          "\\Memory(*)\\% Used Swap Space"
+        ],
+        "name": "perfLinux",
+        "samplingFrequencyInSeconds": 30,
+        "streams": [
+          "Microsoft-Perf"
+        ]
+      }
+    ]
+  },
+  "description": "MiniBank cross-layer lab: Linux performance counters of APP-RHEL every 30 s",
+  "destinations": {
+    "logAnalytics": [
+      {
+        "name": "law",
+        "workspaceId": "<WORKSPACE_ID>",
+        "workspaceResourceId": "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-appmon-openshift-demo/providers/Microsoft.OperationalInsights/workspaces/law-appmon"
+      }
+    ]
+  },
+  "immutableId": "dcr-<IMMUTABLE_ID>",
+  "kind": "Linux",
+  "location": "indonesiacentral",
+  "name": "dcr-minibank-vmperf-linux",
+  "resourceGroup": "rg-appmon-openshift-demo",
+  "tags": {
+    "Project": "MiniBank-demo",
+    "Purpose": "cross-layer-root-cause"
+  },
+  "type": "Microsoft.Insights/dataCollectionRules"
+}

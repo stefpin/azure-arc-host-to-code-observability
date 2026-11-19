@@ -1,0 +1,67 @@
+{
+  "name": "MiniBankVerdict_CL",
+  "plan": "Analytics",
+  "retentionInDays": 30,
+  "columns": [
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "TimeGenerated",
+      "type": "datetime"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Status",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Layer",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Component",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Evidence",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Onset",
+      "type": "datetime"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Impact",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Confidence",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Rule",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Observer",
+      "type": "string"
+    }
+  ]
+}

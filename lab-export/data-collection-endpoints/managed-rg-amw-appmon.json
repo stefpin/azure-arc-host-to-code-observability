@@ -1,0 +1,25 @@
+{
+  "configurationAccess": {
+    "endpoint": "https://<DCE_NAME>.indonesiacentral-1.handler.control.monitor.azure.com"
+  },
+  "description": "Default DCE created for Monitoring Account",
+  "immutableId": "dce-dcee041773034087bef2b912c594daaa",
+  "location": "indonesiacentral",
+  "logsIngestion": {
+    "endpoint": "https://<DCE_NAME>.indonesiacentral-1.ingest.monitor.azure.com"
+  },
+  "metricsIngestion": {
+    "endpoint": "https://<DCE_NAME>.indonesiacentral-1.metrics.ingest.monitor.azure.com"
+  },
+  "name": "amw-appmon",
+  "networkAcls": {
+    "publicNetworkAccess": "Enabled"
+  },
+  "resourceGroup": "MA_amw-appmon_indonesiacentral_managed",
+  "tags": {
+    "demo": "minibank",
+    "owner": "labadmin",
+    "purpose": "appmon-openshift-demo"
+  },
+  "type": "Microsoft.Insights/dataCollectionEndpoints"
+}

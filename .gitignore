@@ -1,0 +1,23 @@
+# build output and dependencies
+node_modules/
+dist/
+bin/
+obj/
+target/
+__pycache__/
+*.pyc
+# local secrets and environment files - never commit these
+.env
+*.env
+!*.env.example
+ENVIRONMENT.txt
+*.pfx
+*.pem
+*.key
+kubeconfig*
+pull-secret*
+*.publishsettings
+# logs and scratch
+*.log
+*.tmp
+.DS_Store

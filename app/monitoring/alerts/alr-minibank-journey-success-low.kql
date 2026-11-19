@@ -1,0 +1,23 @@
+// alr-minibank-journey-success-low (MiniBank v1.4, P1 feature C) - log search alert, severity 2, no action group.
+// Scope: Application Insights appi-minibank (placeholder APPI_ID): customEvents = AppEvents in Log Analytics.
+// Evaluated every 5 minutes over the last 10 minutes. Measure: Table rows (aggregation Count) > 0: the query returns a
+// row only when the customer-journey success rate is below 90 % AND at least 2 journeys failed. Journeys come from the
+// web page (people and the browser robot): custom event "minibank.journey" with stage "end" and success "true"/"false".
+// Created by monitoring/alerts/create-p1-alerts.ps1 (template minibank-p1-alerts.json).
+//
+// ---- Rule query (Application Insights scope) ----
+customEvents
+| where name == "minibank.journey" and tostring(customDimensions["stage"]) == "end"
+| summarize Journeys = sum(itemCount), FailedJourneys = sumif(itemCount, tostring(customDimensions["success"]) != "true")
+| where Journeys > 0
+| extend SuccessPct = round(100.0 * (Journeys - FailedJourneys) / Journeys, 1)
+| where SuccessPct < 90 and FailedJourneys >= 2
+
+// ---- Same check in law-appmon > Logs (Log Analytics schema: AppEvents, Properties) ----
+AppEvents
+| where TimeGenerated > ago(10m)
+| where Name == "minibank.journey" and tostring(Properties["stage"]) == "end"
+| summarize Journeys = sum(ItemCount), FailedJourneys = sumif(ItemCount, tostring(Properties["success"]) != "true")
+| where Journeys > 0
+| extend SuccessPct = round(100.0 * (Journeys - FailedJourneys) / Journeys, 1)
+| where SuccessPct < 90 and FailedJourneys >= 2

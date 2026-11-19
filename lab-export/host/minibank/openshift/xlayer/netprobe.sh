@@ -1,0 +1,22 @@
+#!/bin/bash
+# minibank-netprobe (cross-layer lab, v1.5): TCP connect time from OpenShift to the MiniBank back ends. Every PROBE_INTERVAL
+# seconds one JSON line per target on stdout -> Container insights ContainerLogV2 (LogMessage). Only a TCP handshake:
+# no application data, no credentials. connectMs = time of the TCP handshake; ok=0 = no answer within PROBE_TIMEOUT s.
+INTERVAL="${PROBE_INTERVAL:-15}"
+TIMEOUT="${PROBE_TIMEOUT:-3}"
+TARGETS="${PROBE_TARGETS:-oracle=192.168.110.32:1521 fraud=192.168.110.32:8082}"
+NODE="${NODE_NAME:-unknown}"
+while true; do
+  for t in $TARGETS; do
+    name="${t%%=*}"; hp="${t#*=}"; host="${hp%:*}"; port="${hp##*:}"
+    out="$(timeout "$TIMEOUT" bash -c 's=$EPOCHREALTIME; if : 3<>"/dev/tcp/$0/$1"; then r=1; else r=0; fi; e=$EPOCHREALTIME; echo "${s/./} ${e/./} $r"' "$host" "$port" 2>/dev/null)"
+    if [ -n "$out" ]; then
+      set -- $out; us=$(( $2 - $1 )); ok=$3          # ok=0 here = refused at once (port closed)
+    else
+      us=$(( TIMEOUT * 1000000 )); ok=0              # no answer within PROBE_TIMEOUT s
+    fi
+    printf '{"probe":"minibank-netprobe","target":"%s","host":"%s","port":%s,"ok":%s,"connectMs":%d.%03d,"node":"%s"}\n' \
+      "$name" "$host" "$port" "$ok" $(( us / 1000 )) $(( us % 1000 )) "$NODE"
+  done
+  sleep "$INTERVAL"
+done

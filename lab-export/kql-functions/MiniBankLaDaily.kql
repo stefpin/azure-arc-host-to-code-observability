@@ -1,0 +1,44 @@
+// MiniBankLaDaily  (category: MiniBank Look-ahead; parameters: days:int=10)
+// MiniBankLaDaily(days:int=10) - Look-ahead v1.1: one figure per item per 24-hour block (blocks start 10:00 WIB = 03:00 UTC,
+// the time the Look-ahead makes its daily forecast). Used by the forecast and the prediction scorecard. Drills left out.
+// v1.1 (17 Nov 2026): sixth item = P95 of the business transactions (ms).
+let st = max_of(bin(now() - 3h, 1d) + 3h - days * 1d, datetime(2026-11-13T03:00:00Z));
+let dm = MiniBankDrillMinutes(st);
+let la = Usage
+| where TimeGenerated >= st and IsBillable == true
+| summarize Actual = sum(Quantity) / 1024.0 by Block = bin(TimeGenerated - 3h, 1d) + 3h
+| extend Item = 'Data into Log Analytics (GB per day)';
+let tx = AppRequests
+| where TimeGenerated >= st and AppRoleName == 'minibank-api' and (Name endswith '/api/transfer' or Name endswith '/api/qris/pay' or Name endswith '/statement')
+| extend T = bin(TimeGenerated, 1m)
+| join kind=leftanti dm on T
+| summarize N = sum(ItemCount), Mins = dcount(T) by Block = bin(TimeGenerated - 3h, 1d) + 3h
+| extend Actual = 60.0 * N / Mins, Item = 'Business transactions per hour (drills left out)'
+| project Block, Actual, Item;
+let cpu = Perf
+| where TimeGenerated >= st and Computer startswith 'HV-HOST-02' and ObjectName == 'Hyper-V Hypervisor Logical Processor' and CounterName == '% Total Run Time' and InstanceName == '_Total'
+| extend T = bin(TimeGenerated, 1m)
+| join kind=leftanti dm on T
+| summarize Actual = percentile(CounterValue, 95) by Block = bin(TimeGenerated - 3h, 1d) + 3h
+| extend Item = 'Host CPU busy, P95 (%)';
+let mem = Perf
+| where TimeGenerated >= st and ObjectName == 'K8SContainer' and CounterName == 'memoryWorkingSetBytes' and InstanceName endswith '/minibank-transfer'
+| extend T = bin(TimeGenerated, 1m)
+| join kind=leftanti dm on T
+| summarize Actual = max(CounterValue) / 1048576.0 by Block = bin(TimeGenerated - 3h, 1d) + 3h
+| extend Item = 'Transfer pod memory, max (MB)';
+let disk = InsightsMetrics
+| where TimeGenerated >= st and Namespace == 'container.azm.ms/disk' and Name == 'used_percent'
+| extend Path = tostring(parse_json(Tags).path)
+| where Path in ('/', '/sysroot', '/var')
+| summarize Actual = max(Val) by Block = bin(TimeGenerated - 3h, 1d) + 3h
+| extend Item = 'OpenShift node disk used, max (%)';
+let p95 = AppRequests
+| where TimeGenerated >= st and AppRoleName == 'minibank-api' and (Name endswith '/api/transfer' or Name endswith '/api/qris/pay' or Name endswith '/statement')
+| extend T = bin(TimeGenerated, 1m)
+| join kind=leftanti dm on T
+| summarize Actual = percentile(DurationMs, 95) by Block = bin(TimeGenerated - 3h, 1d) + 3h
+| extend Item = 'Business transactions P95 (ms, drills left out)';
+union la, tx, cpu, mem, disk, p95
+| extend Complete = Block + 1d <= now()
+| project Block, Item, Actual, Complete

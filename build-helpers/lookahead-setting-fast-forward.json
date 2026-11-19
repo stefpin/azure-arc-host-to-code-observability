@@ -1,0 +1,44 @@
+{
+  "type": "custom",
+  "name": "ff",
+  "label": "Look ahead to",
+  "description": "Fast-forward the trail and the month view: pick a stop, or type a number of days (for example 45) or a date (yyyy-mm-dd). The radar, tiles and register stay on today.",
+  "query": "Today : 0, +7 d : 7, +14 d : 14, +30 d : 30, Fri 11 Dec : 2026-12-11",
+  "current": {
+    "selected": true,
+    "text": "Today",
+    "value": "0"
+  },
+  "options": [
+    {
+      "selected": true,
+      "text": "Today",
+      "value": "0"
+    },
+    {
+      "selected": false,
+      "text": "+7 d",
+      "value": "7"
+    },
+    {
+      "selected": false,
+      "text": "+14 d",
+      "value": "14"
+    },
+    {
+      "selected": false,
+      "text": "+30 d",
+      "value": "30"
+    },
+    {
+      "selected": false,
+      "text": "Fri 11 Dec",
+      "value": "2026-12-11"
+    }
+  ],
+  "multi": false,
+  "includeAll": false,
+  "allowCustomValue": true,
+  "hide": 0,
+  "skipUrlSync": false
+}

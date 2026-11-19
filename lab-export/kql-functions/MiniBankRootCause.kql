@@ -1,0 +1,311 @@
+// MiniBankRootCause  (category: MiniBank cross-layer; parameters: at:datetime=datetime(null), lookback:timespan=6m)
+// MiniBankRootCause(at, lookback) - MiniBank cross-layer root-cause verdict (cross-layer lab v1.6, rules v2.10). One row:
+// Status (Healthy | Warning | Pending | RootCause | Unclassified), Layer, Component, Evidence, Onset, Impact, Confidence, Rule.
+// Impact gate (users, last 3 minutes): business transactions (transfer, QRIS, statement) with 5xx > 2 %, or P95 > 1000 ms, or P95 at least
+// 3x its normal value (and >= 400 ms), or typical response (P75) at least 2.5x normal (and >= 250 ms), or >= 2 failed robot journeys. Rules in "explains" order: R1 schema change > R2 containers killed > R3 network path > R4 VM pressure >
+// R5 database slow > R6 new exception spike; no rule but impact = Unclassified (open Investigate). R0 hold: R5, R6 and
+// Unclassified are only named once the slower VM, OpenShift, network and schema data have reported past the symptom
+// onset (they arrive about 60-90 s later than application data), else Status = Pending (max 3.5 minutes). Reads only monitoring
+// data: never the mystery ledger (MiniBankMystery_CL) and never its own history (MiniBankVerdict_CL).
+// v2.8 R8 guard: when users look impacted only because a few calls are slow (P95), while the typical response (P75), failures
+// and robot journeys are normal and no layer rule matched, Status = Warning 'A few slow transactions, no layer at fault'.
+// v2.9 R9 host CPU contention (Hyper-V host HV-HOST-02): the host's logical processors are heavily used (true load from the
+// hypervisor, not the host's Windows view) and several VMs wait clearly longer than normal for a processor; ranks right after R1
+// (it explains slow network, database, container and VM symptoms at once). The hold now also waits for the host data before
+// naming R2, R3 or R4 while users are impacted.
+// v2.10 (15 Nov 2026): that host wait ends early when the newest host reading is recent (at most 150 s old, and taken no more than
+// 60 s before users were first impacted) and clearly quiet
+// (true load below the 70 % hot line and fewer than 3 VMs waiting 3x their normal for a processor): a quiet host is not the cause.
+let t1 = iff(isnull(at), now(), at);
+let t0 = t1 - lookback;
+let b1 = t0;
+let b0 = t0 - 60m;
+// ---- impact on users -------------------------------------------------------------------------------------
+let biz = AppRequests
+    | where TimeGenerated between (t0 .. t1) and AppRoleName == 'minibank-api'
+    | where Name endswith '/api/transfer' or Name endswith '/api/qris/pay' or Name endswith '/statement';
+let baseP95 = toscalar(AppRequests   // 'normal' = a typical minute of the previous hour (lower quartile of the per-minute P95,
+    | where TimeGenerated between (b0 .. b1) and AppRoleName == 'minibank-api'   // so earlier incidents in that hour do not raise it)
+    | where Name endswith '/api/transfer' or Name endswith '/api/qris/pay' or Name endswith '/statement'
+    | summarize P = percentile(DurationMs, 95) by bin(TimeGenerated, 1m)
+    | summarize percentile(P, 25));
+let slowMs = iff(isnotnull(baseP95), max_of(400.0, 3.0 * baseP95), 1000.0);   // 'clearly slower than normal'
+let baseP75 = toscalar(AppRequests   // typical response time of a normal minute (lower quartile of the per-minute P75)
+    | where TimeGenerated between (b0 .. b1) and AppRoleName == 'minibank-api'
+    | where Name endswith '/api/transfer' or Name endswith '/api/qris/pay' or Name endswith '/statement'
+    | summarize P = percentile(DurationMs, 75) by bin(TimeGenerated, 1m)
+    | summarize percentile(P, 25));
+let slow75Ms = iff(isnotnull(baseP75), max_of(250.0, 2.5 * baseP75), 100000.0);   // most users slower, not just a few slow calls
+let impWin = 3m;   // users are 'impacted' on what happened in the last 3 minutes (no stale impact after a recovery)
+let jf = toscalar(AppEvents
+    | where TimeGenerated between (t1 - impWin .. t1) and Name == 'minibank.journey' and tostring(Properties['stage']) == 'end'
+    | summarize f = sumif(ItemCount, tostring(Properties['success']) != 'true'));
+let I = biz
+    | where TimeGenerated >= t1 - impWin
+    | summarize Total = sum(ItemCount), Failed = sumif(ItemCount, toint(ResultCode) >= 500), P95 = percentile(DurationMs, 95), P75 = percentile(DurationMs, 75),
+                SlowN = sumif(ItemCount, DurationMs > min_of(1000.0, slowMs))
+    | extend Total = coalesce(Total, tolong(0)), Failed = coalesce(Failed, tolong(0)), P95 = coalesce(P95, 0.0), JourneysFailed = coalesce(jf, tolong(0)), SlowN = coalesce(SlowN, tolong(0))
+    | extend FailPct = round(100.0 * Failed / iff(Total > 0, Total, 1), 1)
+    | extend Slow3x = isnotnull(baseP95) and P95 >= slowMs, SlowTypical = isnotnull(P75) and P75 >= slow75Ms
+    | extend Impacted = FailPct > 2.0 or P95 > 1000 or JourneysFailed >= 2 or Slow3x or SlowTypical
+    | extend FewSlow = Impacted and not(FailPct > 2.0) and JourneysFailed < 2 and not(SlowTypical)   // v2.8: impact only from a few slow calls
+    | extend ImpactText = strcat(Total, ' business transactions in the last 3 min: ', FailPct, ' % failed (5xx ', Failed, '), P95 ', round(P95, 0), ' ms',
+                                 iff(isnotnull(baseP95) and baseP95 > 0, strcat(' (', round(P95 / baseP95, 1), 'x normal ', round(baseP95, 0), ' ms)'), ''),
+                                 iff(SlowTypical, strcat('; typical response (P75) ', round(P75, 0), ' ms vs normal ', round(baseP75, 0), ' ms'), ''),
+                                 '; failed robot journeys ', JourneysFailed)
+    | extend FewSlowText = strcat(SlowN, ' of ', Total, ' business transactions in the last 3 min took longer than ', round(min_of(1000.0, slowMs), 0),
+                                  ' ms (P95 ', round(P95, 0), ' ms), but the typical response is normal (P75 ', round(coalesce(P75, 0.0), 0), ' ms',
+                                  iff(isnotnull(baseP75), strcat(' vs normal ', round(baseP75, 0), ' ms'), ''), '), ', Failed, ' failed (5xx), ', JourneysFailed,
+                                  ' failed robot journeys, and no VM, OpenShift, network, database or exception signal crossed its threshold')
+    | extend k = 1;
+let impRunStart = toscalar(biz
+    | summarize T = sum(ItemCount), F = sumif(ItemCount, toint(ResultCode) >= 500), P = percentile(DurationMs, 95), P75m = percentile(DurationMs, 75) by m = bin(TimeGenerated, 1m)
+    | extend Imp = (100.0 * F / iff(T > 0, T, 1) > 2.0) or P > 1000 or P >= slowMs or P75m >= slow75Ms
+    | order by m asc
+    | extend PrevImp = prev(Imp, 1, false), PrevM = prev(m, 1, datetime(2000-01-01))
+    | where Imp and (not(PrevImp) or PrevM != m - 1m)
+    | summarize max(m));
+let impOnset = toscalar(biz
+    | where TimeGenerated >= impRunStart and (toint(ResultCode) >= 500 or DurationMs > min_of(1000.0, slowMs, slow75Ms))
+    | summarize min(TimeGenerated));
+// ---- R1 database schema change (Route A schema check) ------------------------------------------------------
+let ddl = toscalar(MiniBankDbSnap_CL
+    | where TimeGenerated between (t0 .. t1) and SnapshotType == 'schema' and Name == 'last_ddl_minutes'
+    | top 1 by Value asc | project Detail);
+let oraErr = toscalar(AppExceptions
+    | where TimeGenerated between (t0 .. t1) and AppRoleName == 'minibank-transfer' and ExceptionType has 'BadSqlGrammar'
+    | summarize sum(ItemCount));
+let R1 = MiniBankDbSnap_CL
+    | where TimeGenerated between (t0 .. t1) and SnapshotType == 'schema' and Name == 'LEDGER_ENTRY'
+    | summarize Checks = count(), Missing = countif(Value == 0), Onset = minif(TimeGenerated, Value == 0)
+    | where Missing > 0
+    | project Rank = 0, Layer = 'Database', Component = 'Oracle FREEPDB1 on APP-RHEL, schema MINIBANK',
+              Evidence = strcat('Table MINIBANK.LEDGER_ENTRY is missing in ', Missing, ' of ', Checks, ' schema checks; latest DDL: ',
+                                coalesce(ddl, '-'), '; minibank-transfer SQL errors (ORA-00942): ', coalesce(oraErr, tolong(0))),
+              Onset, Confidence = 'High', Rule = 'R1 schema change';
+// ---- R2 OpenShift: containers killed / restarted ---------------------------------------------------------------
+let r2From = t0 - 3m;   // kills happen before the failed requests they cause: look 3 minutes further back
+let R2 = KubePodInventory
+    | where TimeGenerated between (r2From .. t1) and Namespace == 'minibank'
+    | extend Container = tostring(split(ContainerName, '/')[1]), ls = parse_json(ContainerLastStatus)
+    | extend Reason = tostring(ls.reason), Finished = todatetime(ls.finishedAt)
+    | summarize Restarts = max(ContainerRestartCount) - min(ContainerRestartCount),
+                Kills = dcountif(Finished, Finished between (r2From .. t1)),
+                Reason = take_anyif(Reason, Finished between (r2From .. t1)),
+                Onset = minif(Finished, Finished between (r2From .. t1)) by Name, Container
+    | extend Events = max_of(tolong(Restarts), tolong(Kills))
+    | where Events > 0
+    | summarize Events = sum(Events), Pods = dcount(Name), Reasons = make_set_if(Reason, isnotempty(Reason)),
+                Containers = make_set(Container), Onset = min(Onset)
+    | where Events > 0
+    | extend Oom = set_has_element(Reasons, 'OOMKilled')
+    | project Rank = 2, Layer = 'OpenShift', Component = strcat('Deployment ', strcat_array(Containers, ', '), ' (namespace minibank, arc-ocp-minibank)'),
+              Evidence = strcat(Events, ' container restarts in ', Pods, ' pods; last termination reason: ',
+                                iff(array_length(Reasons) > 0, strcat_array(Reasons, ', '), 'unknown'),
+                                iff(Oom, ' (exit 137: the container reached its memory limit of 768Mi)', '')),
+              Onset, Confidence = iff(Oom, 'High', 'Medium'), Rule = 'R2 containers killed';
+// ---- R3 network path (TCP connect from the OpenShift probe pod) ---------------------------------------------------
+let probe = (a: datetime, b: datetime) {
+    ContainerLogV2
+    | where TimeGenerated between (a .. b) and PodNamespace == 'minibank' and ContainerName == 'netprobe'
+    | extend m = parse_json(tostring(LogMessage))
+    | where tostring(m.probe) == 'minibank-netprobe'
+    | project TimeGenerated, Target = tostring(m.target), Host = tostring(m.host), Port = toint(m.port), Ok = toint(m.ok), Ms = todouble(m.connectMs)
+};
+let pbase = probe(b0, b1) | summarize BaseP50 = percentile(Ms, 50) by Target;
+let R3 = probe(t0, t1)
+    | summarize N = count(), Lost = countif(Ok == 0), Slow = countif(Ms > 50), P50 = percentile(Ms, 50),
+                Onset = minif(TimeGenerated, Ok == 0 or Ms > 50), Host = take_any(Host), Port = take_any(Port) by Target
+    | join kind=leftouter pbase on Target
+    | extend Base = coalesce(BaseP50, 2.0)
+    | extend Bad = N >= 4 and (P50 > max_of(30.0, 5 * Base) or Lost + Slow >= 4)
+    | extend VmName = case(Host == '192.168.110.32', 'APP-RHEL', Host == '192.168.110.31', 'APP-WIN', Host == '192.168.110.33', 'APP-SQL', Host)
+    | summarize BadTargets = make_set_if(strcat(Target, ' (', VmName, ':', Port, ') p50 ', round(P50, 1), ' ms vs baseline ', round(Base, 1), ' ms, slow or lost ', Slow + Lost, ' of ', N), Bad),
+                GoodTargets = make_set_if(strcat(Target, ' (', VmName, ') p50 ', round(P50, 1), ' ms'), not(Bad)),
+                BadVms = make_set_if(strcat(VmName, ' (', Host, ')'), Bad), Onset = minif(Onset, Bad)
+    | where array_length(BadTargets) > 0
+    | project Rank = 3, Layer = 'Network', Component = strcat('Path OpenShift nodes -> ', strcat_array(BadVms, ', ')),
+              Evidence = strcat('TCP connect from OpenShift: ', strcat_array(BadTargets, '; '),
+                                iff(array_length(GoodTargets) > 0, strcat('. Normal: ', strcat_array(GoodTargets, '; ')), '')),
+              Onset, Confidence = iff(array_length(GoodTargets) > 0, 'High', 'Medium'), Rule = 'R3 network path';
+// ---- R4 VM pressure (Arc-enabled servers APP-WIN, APP-SQL, APP-RHEL) ------------------------------------------------
+let perfVm = Perf
+    | where TimeGenerated between (t0 .. t1)
+    | extend Vm = case(Computer startswith 'APP-WIN', 'APP-WIN', Computer startswith 'APP-SQL', 'APP-SQL',
+                       Computer startswith 'app-rhel' or Computer startswith 'APP-RHEL', 'APP-RHEL', '')
+    | where Vm != '';
+let cpuRaw = perfVm
+    | where ObjectName == 'Processor' and CounterName == '% Processor Time' and InstanceName in ('_Total', 'total')
+    | project TimeGenerated, Vm, CounterValue;
+let cpuOn = cpuRaw | summarize On = minif(TimeGenerated, CounterValue >= 85) by Vm | where isnotnull(On);
+let cpuHot = cpuRaw | join kind=inner cpuOn on Vm | where TimeGenerated >= On | summarize HotAvg = avg(CounterValue) by Vm;
+let cpu = cpuRaw
+    | summarize CpuAvg = avg(CounterValue), Hot = countif(CounterValue >= 85), N = count(), CpuOnset = minif(TimeGenerated, CounterValue >= 85) by Vm
+    | join kind=leftouter cpuHot on Vm;
+let mem = perfVm
+    | where ObjectName == 'Memory' and CounterName in ('% Committed Bytes In Use', '% Used Memory')
+    | summarize MemAvg = avg(CounterValue), MemHot = countif(CounterValue >= 92), MemOnset = minif(TimeGenerated, CounterValue >= 92) by Vm;
+let topProc = perfVm
+    | where ObjectName == 'Process' and CounterName == '% Processor Time'
+    | summarize P = avg(CounterValue) by Vm, InstanceName
+    | summarize arg_max(P, InstanceName) by Vm;
+let R4 = cpu
+    | join kind=leftouter mem on Vm
+    | join kind=leftouter topProc on Vm
+    | extend CpuBad = Hot >= 2 and coalesce(HotAvg, 0.0) >= 80, MemBad = coalesce(MemHot, tolong(0)) >= 2
+    | where CpuBad or MemBad
+    | extend Runs = case(Vm == 'APP-WIN', 'minibank-api (IIS) and the browser robot', Vm == 'APP-SQL', 'SQL Server MiniBankDemo',
+                         Vm == 'APP-RHEL', 'Oracle FREEPDB1, PostgreSQL and minibank-fraud', '')
+    | top 1 by coalesce(HotAvg, CpuAvg) desc
+    | project Rank = 4, Layer = 'VM', Component = strcat(Vm, ' (Arc-enabled server running ', Runs, ')'),
+              Evidence = strcat(iff(CpuBad, strcat('CPU ', round(HotAvg, 0), ' % since ', format_datetime(CpuOnset + 7h, 'HH:mm:ss'), ' WIB, ', Hot, ' of ', N, ' samples at 85 % or more'), ''),
+                                iff(MemBad, strcat(iff(CpuBad, '; ', ''), 'memory ', round(MemAvg, 0), ' % used'), ''),
+                                iff(isnotempty(InstanceName), strcat('; busiest process: ', InstanceName, ' (', round(P, 0), ' % of one core)'), '')),
+              Onset = iff(CpuBad, CpuOnset, MemOnset), Confidence = 'High', Rule = 'R4 VM pressure';
+// ---- R5 database slow (server side; the network probe and the VMs are normal) --------------------------------------
+let dep = (a: datetime, b: datetime) {
+    AppDependencies
+    | where TimeGenerated between (a .. b)
+    | where (AppRoleName == 'minibank-transfer' and DependencyType == 'oracle.db') or (AppRoleName == 'minibank-api' and DependencyType == 'SQL')
+    | extend Db = iff(DependencyType == 'SQL', 'SQL Server MiniBankDemo on APP-SQL', 'Oracle FREEPDB1 on APP-RHEL')
+    | project TimeGenerated, Db, DurationMs, Name
+};
+let dbase = dep(b0, b1) | summarize BaseMsPerMin = sum(DurationMs) / ((b1 - b0) / 1m) by Db;
+let r5first = dep(t0, t1)
+    | summarize Ms = sum(DurationMs) by Db, m = bin(TimeGenerated, 1m)
+    | join kind=leftouter dbase on Db
+    | where Ms > max_of(3000.0, 4 * coalesce(BaseMsPerMin, 500.0))
+    | summarize FirstSlowMin = min(m) by Db;
+let dslow = dep(t0, t1) | summarize arg_max(DurationMs, Name) by Db | project Db, SlowName = Name, SlowMs = DurationMs;
+let R5 = dep(t0, t1)
+    | summarize MsPerMin = sum(DurationMs) / (lookback / 1m), N = count(), P95 = percentile(DurationMs, 95), Onset = minif(TimeGenerated, DurationMs > 500) by Db
+    | join kind=leftouter dbase on Db
+    | join kind=leftouter dslow on Db
+    | join kind=leftouter r5first on Db
+    | extend Onset = coalesce(FirstSlowMin, Onset)
+    | where N >= 10 and MsPerMin > max_of(3000.0, 4 * coalesce(BaseMsPerMin, 500.0))
+    | top 1 by MsPerMin desc
+    | project Rank = 5, Layer = 'Database', Component = Db,
+              Evidence = strcat('Time spent in database calls ', round(MsPerMin / 1000, 1), ' s per minute (normal ', round(coalesce(BaseMsPerMin, 0.0) / 1000, 1),
+                                ' s), P95 ', round(P95, 0), ' ms over ', N, ' calls; slowest: ', substring(SlowName, 0, 80), ' (', round(SlowMs, 0), ' ms)'),
+              Onset, Confidence = 'Medium', Rule = 'R5 database slow';
+// ---- R6 new exception spike ----------------------------------------------------------------------------------------
+let ex = (a: datetime, b: datetime) {
+    AppExceptions
+    | where TimeGenerated between (a .. b) and AppRoleName startswith 'minibank-'
+    | extend Key = strcat(AppRoleName, '|', ExceptionType)
+};
+let exBase = ex(b0, b1)   // a typical minute of the previous hour, zero minutes included (75th percentile), so a recent burst
+    | make-series C = sum(ItemCount) default = 0 on TimeGenerated from b0 to b1 step 1m by Key   // of the same fault does not count as normal
+    | mv-expand C to typeof(double)
+    | summarize BasePerMin = percentile(C, 75) by Key;
+let R6 = ex(t0, t1)
+    | summarize Count = sum(ItemCount), Onset = min(TimeGenerated), Msg = take_any(OuterMessage), Where = take_any(Method),
+                Role = take_any(AppRoleName), Type = take_any(ExceptionType) by Key
+    | join kind=leftouter exBase on Key
+    | extend Expected = coalesce(BasePerMin, 0.0) * (lookback / 1m)
+    | where Count >= 5 and Count > 5 * Expected
+    | top 1 by Count desc
+    | project Rank = 6, Layer = 'Application', Component = Role,
+              Evidence = strcat(Type, ' x', Count, ' (normal for this window: ', round(Expected, 1), '): ', substring(Msg, 0, 160),
+                                iff(isnotempty(Where), strcat(' | at ', substring(Where, 0, 140)), '')),
+              Onset, Confidence = 'High', Rule = 'R6 new exception';
+// ---- R9 host CPU contention (Hyper-V host HV-HOST-02, v2.9) ---------------------------------------------------------
+// True host load = Hyper-V Hypervisor Logical Processor(_Total) % Total Run Time (Windows on the host only sees its own
+// partition). Waiting = CPU Wait Time Per Dispatch per VM against its lower quartile of the previous hour (so earlier contention
+// in that hour does not raise 'normal'). The biggest consumer is
+// the VM with the most logical processors in use (sum of its virtual processors' run time). Calibrated 14 Nov 2026 (tests T1-T6):
+// this nested host never passes ~87 % true load (core scheduler: an idle sibling thread cannot run another VM), normal is 27-44 %,
+// the noisy batch VM at 16 vCPU gives 84-87 % with every other VM waiting 5-7x its normal.
+let hHotPct = 70.0; let hHotAvg = 70.0; let hWaitX = 3.0; let hMinWaiting = 3; let hostLps = 20;
+let hostPerf = (a: datetime, b: datetime) { Perf | where TimeGenerated between (a .. b) and Computer startswith 'HV-HOST-02' };
+let hLp = hostPerf(t0, t1) | where ObjectName == 'Hyper-V Hypervisor Logical Processor' and CounterName == '% Total Run Time' and InstanceName == '_Total'
+    | project TimeGenerated, V = CounterValue;
+let hOn = toscalar(hLp | where V >= hHotPct | summarize min(TimeGenerated));
+let hFrom = coalesce(hOn, t1);
+let hWin = toscalar(hostPerf(hFrom, t1) | where ObjectName == 'Processor' and CounterName == '% Processor Time' | summarize avg(CounterValue));
+let hVp = (a: datetime, b: datetime) { hostPerf(a, b) | where ObjectName == 'Hyper-V Hypervisor Virtual Processor' and InstanceName != '_Total'
+    | extend VM = tostring(split(InstanceName, ':')[0]) };
+let hUse = hVp(hFrom, t1) | where CounterName == '% Total Run Time' | summarize U = sum(CounterValue) / 100.0, Vcpu = dcount(InstanceName) by VM, TimeGenerated
+    | summarize U = avg(U), Vcpu = max(Vcpu) by VM;
+let hTopVm = toscalar(hUse | top 1 by U desc | project VM);
+let hTopU = toscalar(hUse | top 1 by U desc | project U);
+let hTopV = toscalar(hUse | top 1 by U desc | project Vcpu);
+let hWait = hVp(hFrom, t1) | where CounterName == 'CPU Wait Time Per Dispatch' | summarize W = avg(CounterValue) by VM
+    | join kind=leftouter (hVp(b0, b1) | where CounterName == 'CPU Wait Time Per Dispatch' | summarize Base = percentile(CounterValue, 25) by VM) on VM
+    | extend X = iff(coalesce(Base, 0.0) > 0, W / Base, 0.0)
+    | where VM != hTopVm and X >= hWaitX;
+let hNWait = toscalar(hWait | count);
+let hMaxX = toscalar(hWait | summarize max(X));
+let hList = toscalar(hWait | order by X desc | summarize make_list(strcat(VM, ' x', round(X, 1))));
+let R9 = hLp
+    | summarize Hot = countif(V >= hHotPct), N = count(), HotAvg = avgif(V, TimeGenerated >= hFrom)
+    | where Hot >= 2 and HotAvg >= hHotAvg and hNWait >= hMinWaiting
+    | where not(hTopVm in ('APP-WIN', 'APP-SQL', 'APP-RHEL') and toscalar(R4 | count) > 0)   // one app VM's own CPU = R4
+    | project Rank = 1, Layer = 'Host', Component = 'HV-HOST-02 (Hyper-V host of every lab VM)',
+              Evidence = strcat('Host CPU ', round(HotAvg, 0), ' % busy (true load; Windows on the host shows ', round(coalesce(hWin, 0.0), 0), ' %); ',
+                                hNWait, ' VMs wait for a processor up to ', round(hMaxX, 1), 'x longer than normal (', strcat_array(hList, ', '), '); biggest consumer: ',
+                                hTopVm, ' (', hTopV, ' vCPU) using ', round(hTopU, 1), ' of ', hostLps, ' logical processors'),
+              Onset = hOn, Confidence = 'High', Rule = 'R9 host CPU contention';
+// ---- R0 hold: wait for the slower layer data before naming an application-side cause ----------------------------
+// Each lower-layer source must report past the symptom onset by the time its rule needs: probe 60 s (4 samples),
+// VM performance 60 s (2 samples at 30 s), OpenShift pod inventory 30 s, schema check 15 s (only for SQL errors or
+// when no rule matched). Missing sources are ignored; the hold ends after 3.5 minutes at the latest.
+let holdMax = 210s;
+let top1 = union R1, R9, R2, R3, R4, R5, R6 | top 1 by Rank asc | extend k = 1;
+let t1Rank = toscalar(top1 | project Rank);
+let t1On = toscalar(top1 | project Onset);
+let t1Ev = toscalar(top1 | project Evidence);
+let ruleOn = iff(t1Rank in (5, 6), t1On, datetime(null));
+let symOn = case(isnotnull(ruleOn) and isnotnull(impOnset), iff(ruleOn > impOnset, ruleOn, impOnset), isnotnull(ruleOn), ruleOn, isnotnull(impOnset), impOnset, t0);
+let sqlish = isnull(t1Rank) or (t1Rank == 6 and t1Ev has_any ('Sql', 'ORA-', 'jdbc'));
+let fresh = union
+    (probe(t0, t1) | summarize F = max(TimeGenerated) | extend Src = 'network probe', Need = 60s),
+    (MiniBankDbSnap_CL | where TimeGenerated between (t0 .. t1) and SnapshotType == 'schema' | summarize F = max(TimeGenerated)
+        | extend Src = 'database schema check', Need = iff(sqlish, 15s, 0s - 1d)),
+    (KubePodInventory | where TimeGenerated between (t0 .. t1) and Namespace == 'minibank' | summarize F = max(TimeGenerated) | extend Src = 'OpenShift pod inventory', Need = 30s),
+    (perfVm | summarize F = max(TimeGenerated) by Vm | project F, Src = strcat(Vm, ' performance'), Need = 60s),
+    (hostPerf(t0, t1) | where ObjectName == 'Hyper-V Hypervisor Logical Processor' | summarize F = max(TimeGenerated) | extend Src = 'HV-HOST-02 host CPU', Need = 60s)
+    | where isnotnull(F);
+let lag = fresh | where F < symOn + Need;
+let nLag = toscalar(lag | count);
+let lagSrc = toscalar(lag | top 1 by F asc | project Src);
+let lagF = toscalar(lag | top 1 by F asc | project F);
+let hostF = toscalar(hostPerf(t0, t1) | where ObjectName == 'Hyper-V Hypervisor Logical Processor' | summarize max(TimeGenerated));
+// v2.10: end the host wait early when the newest host reading is recent, from around the impact onset and clearly quiet (late or missing host data keeps the wait)
+let hQ = hostPerf(t1 - 3m, t1) | where ObjectName == 'Hyper-V Hypervisor Logical Processor' and CounterName == '% Total Run Time' and InstanceName == '_Total'
+    | top 1 by TimeGenerated desc | project QT = TimeGenerated, QV = CounterValue;
+let hQT = toscalar(hQ | project QT);
+let hQV = toscalar(hQ | project QV);
+let hQWait = toscalar(hVp(hQT - 59s, hQT) | where CounterName == 'CPU Wait Time Per Dispatch' | summarize W = avg(CounterValue) by VM
+    | join kind=leftouter (hVp(b0, b1) | where CounterName == 'CPU Wait Time Per Dispatch' | summarize Base = percentile(CounterValue, 25) by VM) on VM
+    | extend X = iff(coalesce(Base, 0.0) > 0, W / Base, 0.0) | where X >= hWaitX | count);
+let hostQuiet = isnotnull(hQT) and hQT >= t1 - 150s and hQT >= symOn - 60s and coalesce(hQV, 100.0) < hHotPct and coalesce(hQWait, 99) < hMinWaiting;
+let hostCovered = isnull(hostF) or hostF >= symOn + 60s or t1 >= symOn + holdMax or hostQuiet;   // v2.9 wait for the host data; v2.10 early end
+// ---- verdict ----------------------------------------------------------------------------------------------------------
+I
+| join kind=leftouter top1 on k
+| extend Rank = coalesce(Rank, 99)
+| extend Covered = nLag == 0 or t1 >= symOn + holdMax
+| extend Guard = FewSlow and Rank == 99   // v2.8 R8: a few slow transactions and no layer rule = Warning, not Pending or Unclassified
+| extend HostHold = Impacted and Rank in (2, 3, 4) and not(hostCovered)
+| extend Status = case(Guard, 'Warning', Impacted and Rank >= 5 and not(Covered), 'Pending', HostHold, 'Pending', Impacted and isnotempty(Layer), 'RootCause', Impacted, 'Unclassified', isnotempty(Layer), 'Warning', 'Healthy')
+| extend PendingText = strcat('Users impacted since ', format_datetime(symOn + 7h, 'HH:mm:ss'), ' WIB; first signal so far: ',
+                               iff(Rank == 99, 'none', strcat(Layer, ' (', Rule, ')')),
+                               iff(HostHold, strcat('. Waiting for the HV-HOST-02 host CPU data to report past that time (latest ', format_datetime(hostF + 7h, 'HH:mm:ss'),
+                                                    ' WIB), so a host cause is not missed'),
+                                   strcat('. Waiting for ', nLag, ' slower source(s) to report past that time (slowest: ', coalesce(lagSrc, '-'), ', latest ',
+                                          format_datetime(lagF + 7h, 'HH:mm:ss'), ' WIB), so a host, VM, OpenShift, network or database cause is not missed')))
+| project TimeGenerated = t1, Status,
+          Layer = case(Guard, 'No layer at fault', Status == 'Healthy', 'Healthy', Status == 'Unclassified', 'Unclassified', Status == 'Pending', 'Pending', Layer),
+          Component = case(Guard, 'A few slow transactions, no layer at fault', Status == 'Healthy', 'All layers normal', Status == 'Unclassified', 'No layer rule matched: open Investigate (AI) on the alert',
+                           Status == 'Pending', 'Checking every layer before naming one', Component),
+          Evidence = case(Guard, FewSlowText, Status == 'Healthy', 'No layer signal and no user impact in the window',
+                          Status == 'Unclassified', 'Users are impacted, but no host, VM, OpenShift, network, database or exception signal crossed its threshold',
+                          Status == 'Pending', PendingText,
+                          Evidence),
+          Onset = case(Guard, impOnset, Status == 'Pending', symOn, Onset), Impact = ImpactText,
+          Confidence = case(Guard or Status in ('Healthy', 'Unclassified', 'Pending'), '', Confidence),
+          Rule = case(Guard, 'R8 few slow transactions', Status == 'Healthy', '', Status == 'Unclassified', 'R7 unclassified', Status == 'Pending', 'R0 waiting for all layers', Rule),
+          WindowMinutes = toint(lookback / 1m)
+

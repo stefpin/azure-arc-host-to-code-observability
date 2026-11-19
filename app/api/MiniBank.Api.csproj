@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- minibank-api: ASP.NET Core minimal API on .NET 10, hosted in IIS on APP-WIN (site port 8080).
+       Build and publish on APP-WIN with the .NET 10 SDK: the exact command is in README.md (section api). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>MiniBank.Api</RootNamespace>
+    <AssemblyName>MiniBank.Api</AssemblyName>
+    <Version>1.2.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Azure Monitor OpenTelemetry distro: one line in Program.cs (UseAzureMonitor).
+         Collects requests, SQL and HTTP dependencies, exceptions and logs. -->
+    <PackageReference Include="Azure.Monitor.OpenTelemetry.AspNetCore" Version="1.6.0" />
+    <!-- SQL Server client. Windows authentication as the IIS app pool account minibank-svc. -->
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
+  </ItemGroup>
+
+</Project>

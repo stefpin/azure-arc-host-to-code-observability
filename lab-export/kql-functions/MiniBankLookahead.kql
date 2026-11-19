@@ -1,0 +1,134 @@
+// MiniBankLookahead  (category: MiniBank Look-ahead; parameters: -)
+// MiniBankLookahead() - Look-ahead v1.0 risk register of the MiniBank lab: one row per risk from four lenses - Capacity (trend
+// to the limit), Calendar (expiry dates), Posture (known weaknesses) and Service (error budget of the business transactions).
+// Status: Act = breaks within 7 days, or would break if one part fails; Watch = within 30 days, or a known weakness;
+// Planned = known and accepted; OK = nothing in sight; Info = context only. It shows the risks; it fixes nothing.
+// v1.1 (17 Nov 2026): a Limit row may carry a warning level (High, below the limit): Watch when its trend reaches the warning
+// within 30 days; Act stays 7 days before the limit. Used by the speed of the business transactions (P95, warning 800 ms,
+// limit 1000 ms), shown in the Service lens.
+let nowT = now();
+let r = materialize(MiniBankLaReadings(7d) | extend x = (TimeGenerated - nowT) / 1d);
+let fit = r
+| summarize n = count(), sx = sum(x), sy = sum(Value), sxx = sum(x * x), sxy = sum(x * Value), First = min(TimeGenerated) by Area, Resource, Item
+| extend d = n * sxx - sx * sx
+| extend Slope = iff(n >= 3 and d > 0, (n * sxy - sx * sy) / d, real(null)), Span = (nowT - First) / 1d
+| project Area, Resource, Item, n, Slope, Span, First;
+let cap = r
+| summarize arg_max(TimeGenerated, Value, Unit, Limit, Low, High, Src) by Area, Resource, Item
+| join kind=inner fit on Area, Resource, Item
+| extend Trend = Span >= 1.0 and n >= iff(Item has 'per day', 3, 6) and isnotnull(Slope), Up = isnotnull(Limit), Down = isnull(Limit) and isnotnull(Low)
+| extend Warn = iff(Up and isnotnull(High) and High < Limit, High, real(null))
+| extend DaysLeft = case(
+    Up and Value >= Limit, 0.0,
+    Up and Trend and Slope > 0, (Limit - Value) / Slope,
+    Down and Value <= Low, 0.0,
+    Down and Trend and Slope < 0, (Value - Low) / (0.0 - Slope),
+    real(null))
+| extend DaysWarn = case(isnull(Warn), real(null), Value >= Warn, 0.0, Trend and Slope > 0, (Warn - Value) / Slope, real(null))
+| extend Status = case(
+    isnotnull(DaysLeft) and DaysLeft <= 7, 'Act',
+    isnotnull(DaysLeft) and DaysLeft <= 30, 'Watch',
+    isnotnull(DaysWarn) and DaysWarn <= 30, 'Watch',
+    Up and Value >= 0.9 * Limit, 'Watch',
+    Down and isnotnull(High) and Value <= High, 'Watch',
+    Up or Down, 'OK',
+    'Info')
+| extend LimitText = case(Up and isnotnull(Warn), strcat(round(Limit, 1), ' ', Unit, ' (warning ', round(Warn, 1), ' ', Unit, ')'), Up, strcat(round(Limit, 1), ' ', Unit), Down, strcat('above ', round(Low, 1), ' ', Unit), ''),
+         Basis = iff(Trend, strcat('Trend ', iff(Slope >= 0, '+', ''), round(Slope, 3), ' ', Unit, '/day over ', round(Span, 1), ' days (', n, ' readings); ', Src),
+                     strcat('Too little history for a trend yet (', n, ' readings since ', format_datetime(First + 7h, 'dd/MM HH:mm'), ' WIB); ', Src)),
+         WarnText = case(
+             isnull(Warn), '',
+             Value >= Limit, strcat('; already above the ', round(Limit, 1), ' ', Unit, ' limit'),
+             Value >= Warn, strcat('; already above the ', round(Warn, 1), ' ', Unit, ' warning', iff(isnotnull(DaysLeft), strcat('; limit in ', round(DaysLeft, 1), ' days (', format_datetime(nowT + 1d * DaysLeft + 7h, 'yyyy-MM-dd'), ')'), '')),
+             isnotnull(DaysWarn), strcat('; at this trend the ', round(Warn, 1), ' ', Unit, ' warning is reached in ', round(DaysWarn, 1), ' days (', format_datetime(nowT + 1d * DaysWarn + 7h, 'yyyy-MM-dd'), ') and the ', round(Limit, 1), ' ', Unit, ' limit in ', round(DaysLeft, 1), ' days (', format_datetime(nowT + 1d * DaysLeft + 7h, 'yyyy-MM-dd'), ')'),
+             Trend, '; not rising: no warning date in sight',
+             '')
+| project Lens = iff(Area == 'Business transactions', 'Service', 'Capacity'), Area, Resource, Item, Value, Unit, LimitText, DaysLeft, Status, Basis = strcat(Basis, WarnText);
+let calColl = MiniBankLookahead_CL
+| where TimeGenerated > nowT - 3d and Kind == 'calendar'
+| summarize arg_max(TimeGenerated, DueUtc, Text) by Area, Resource, Item
+| project Area, Resource, Item, DueUtc, Status0 = '', Basis = strcat('Collector, read ', format_datetime(TimeGenerated + 7h, 'yyyy-MM-dd HH:mm'), ' WIB', iff(isempty(Text), '', strcat('; ', Text)));
+let calStatic = datatable(Area:string, Resource:string, Item:string, DueUtc:datetime, Status0:string, Basis:string) [
+  'Azure', '<ACR_NAME>', 'Image pull token expires', datetime(2026-12-10T13:17:28Z), '', 'Entered by hand from the container registry (token minibank-pull, read 13 Nov 2026)',
+  'Azure', '<ACR_NAME>', 'Image push token expires', datetime(2026-11-17T13:48:20Z), 'Planned', 'Entered by hand (token minibank-push); left to lapse by design (decision of 16 Nov 2026)',
+  'Monitoring', 'law-appmon', 'Oldest lab data starts to age out', datetime(2026-12-10T00:00:00Z), 'Info', 'The workspace keeps 30 days; lab data since 10 Nov 2026'];
+let cal = union calColl, calStatic
+| extend DaysLeft = (DueUtc - nowT) / 1d
+| extend Status = case(Status0 != '', Status0, DaysLeft <= 7, 'Act', DaysLeft <= 30, 'Watch', 'OK')
+| project Lens = 'Calendar', Area, Resource, Item, Value = real(null), Unit = '', LimitText = strcat('due ', format_datetime(DueUtc + 7h, 'yyyy-MM-dd HH:mm'), ' WIB'), DaysLeft = max_of(DaysLeft, 0.0), Status, Basis;
+let pos = MiniBankLookahead_CL
+| where TimeGenerated > nowT - 3d and Kind == 'posture'
+| summarize arg_max(TimeGenerated, Value, Unit, Limit, High, Text) by Area, Resource, Item
+| extend Over = isnotnull(Limit) and Value > Limit
+| extend Status = case(Over and High >= 2, 'Act', Over and High >= 1, 'Watch', Over or isnull(Limit), 'Info', 'OK')
+| project Lens = 'Posture', Area, Resource, Item, Value, Unit, LimitText = iff(isnull(Limit), '', strcat('at most ', round(Limit, 1), ' ', Unit)), DaysLeft = real(null), Status,
+          Basis = strcat('Collector, read ', format_datetime(TimeGenerated + 7h, 'yyyy-MM-dd HH:mm'), ' WIB', iff(isempty(Text), '', strcat('; ', Text)));
+let col = MiniBankLookahead_CL
+| where TimeGenerated > nowT - 7d and Kind == 'collector'
+| summarize arg_max(TimeGenerated, Text)
+| where isnotnull(TimeGenerated)
+| extend Age = (nowT - TimeGenerated) / 1h
+| project Lens = 'Posture', Area = 'Monitoring', Resource = 'HV-HOST-02', Item = 'Look-ahead collector last run', Value = round(Age, 1), Unit = 'hours ago', LimitText = 'at most 2 hours ago', DaysLeft = real(null), Status = iff(Age > 2.0, 'Watch', 'OK'), Basis = Text;
+let svc = MiniBankErrorBudget(7d)
+| project Lens = 'Service', Area = 'Business transactions', Resource = 'minibank-api', Item = strcat(Objective, ' - error budget left'), Value = RemainingPct, Unit = '%', LimitText = Target, DaysLeft = DaysToZero, Status, Basis;
+union cap, cal, pos, col, svc
+| extend Impact = case(
+    Item startswith 'Business transactions P95', 'Payments get slower day by day; the 1-second target is missed on the date shown.',
+    Item has 'busy', 'Every VM on the host slows down together when the host runs out of CPU.',
+    Item == 'Node disk used', 'OpenShift removes images and evicts pods when a node disk passes 85-90 %.',
+    Item has 'busiest', 'The transfer pod is restarted (out of memory) at its limit; transfers fail during the restart.',
+    Item has 'Analytics', 'At the 10 GB daily cap, data collection stops until the cap resets: the boards go blind.',
+    Item startswith 'Drive' or (Item startswith 'Disk' and Item endswith 'used'), 'A full disk stops writes on that machine (database, logs, updates).',
+    Item == 'Memory in use', 'The machine starts paging and slows down; services can be stopped for lack of memory.',
+    Item has 'Virtual', 'More virtual CPUs than the host can serve makes every VM wait for CPU.',
+    Item has 'response', 'Slow storage makes database calls and payments slower.',
+    Item has 'Network' or Item has 'throughput', 'Context for the other figures (no fixed limit).',
+    Item has 'requests', 'New or moved pods stay Pending when node requests reach what the node can give.',
+    Item startswith 'Pods', 'No more pods can start on the node at its pod limit.',
+    Item has 'Spare', 'If that node fails, some of its pods cannot restart elsewhere: part of MiniBank stays down.',
+    Item startswith 'Oracle user', 'Oracle Database Free stops accepting data at its 12 GB user-data limit: payments fail.',
+    Item has 'Tablespace', 'Inserts fail when the tablespace is full: payments fail.',
+    Item has 'Sessions' or Item has 'Processes' or Item has 'Connections', 'New database connections are refused at the limit: payments fail.',
+    Item startswith 'Transaction', 'PostgreSQL forces vacuuming as the age grows and stops writes near 2 billion.',
+    Item startswith 'Ledger' or Item startswith 'Database size' or Item startswith 'Log file', 'Growth context for the database limits.',
+    Item has 'pull', 'Image pulls fail: new, moved or restarted pods that need the image cannot start.',
+    Item has 'push', 'No new image versions can be pushed with this token.',
+    Item startswith 'Oldest', 'Trends and back-tests lose their first days.',
+    Item has 'evaluation', 'The Windows evaluation ends: the VM shuts down every hour after the date.',
+    Item startswith 'Password', 'The application can no longer log on to Oracle: payments fail.',
+    Item has 'certificate', 'Browsers and clients reject the MiniBank web address.',
+    Item has 'update' and Item startswith 'Days since', 'Known security fixes are missing.',
+    Item has 'backup', 'Data since the last backup cannot be restored after a failure.',
+    Item has 'healthy' or Item has 'ready', 'A degraded platform part can take services down.',
+    Item has 'updates' and Item has 'available', 'A newer OpenShift release is available.',
+    Item has 'Deprecated', 'Calls that will stop working after the next upgrade.',
+    Item has 'collector', 'The Look-ahead board goes stale without fresh readings.',
+    Item has 'budget', 'When the budget is used up, the service target for customers is missed.',
+    '')
+| extend Action = case(
+    Status in ('OK', 'Info'), 'None now.',
+    Item startswith 'Business transactions P95', 'Find the step that is slowing down and fix it before the warning date.',
+    Item has 'push', 'None: lapses by design (no image pushes planned).',
+    Item has 'pull', 'Renew the token password and update the pull secret in OpenShift before the date.',
+    Item has 'Spare' or Item has 'requests', 'Add a node or lower pod requests so one node can fail safely.',
+    Item has 'Analytics', 'Raise the daily cap or trim the noisiest tables before the date.',
+    Item has 'update' and Item startswith 'Days since', 'Patch in the next maintenance window (shown, not fixed, in the lab).',
+    Item has 'backup', 'Schedule regular backups (shown, not fixed, in the lab).',
+    Item startswith 'Password', 'Change the password or the profile before the date.',
+    Item has 'evaluation', 'Activate a licence or rebuild before the date.',
+    Item has 'certificate', 'Renew the ingress certificate before the date.',
+    Item has 'budget', 'Freeze risky changes and find the cause of the failures.',
+    Item has 'collector', 'Check the scheduled task minibank-lookahead on HV-HOST-02.',
+    'Plan the fix before the date shown.')
+| extend Owner = case(
+    Area == 'Database', 'DBA',
+    Area == 'OpenShift' or Area == 'Host' or Area == 'VM', 'Platform team',
+    Area == 'Monitoring', 'Monitoring team',
+    Area == 'Business transactions', 'App team',
+    Area == 'Azure', 'Platform team',
+    'Lab owner')
+| extend Rank = case(Status == 'Act', 1, Status == 'Watch', 2, Status == 'Planned', 3, Status == 'OK', 4, 5)
+| extend Now = iff(isnull(Value), '', strcat(iff(abs(Value) >= 100.0, tostring(round(Value, 0)), tostring(round(Value, 2))), ' ', Unit)),
+         DaysLeft = round(DaysLeft, 1)
+| order by Rank asc, DaysLeft asc nulls last, Lens asc, Area asc, Resource asc, Item asc
+| project Status, Lens, Area, Resource, Item, Now, Limit = LimitText, DaysLeft, Impact, Action, Owner, Basis

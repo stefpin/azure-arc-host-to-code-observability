@@ -1,0 +1,79 @@
+{
+  "name": "MiniBankMystery_CL",
+  "plan": "Analytics",
+  "retentionInDays": 30,
+  "columns": [
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "TimeGenerated",
+      "type": "datetime"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "RunId",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Mode",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Slot",
+      "type": "int"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Number",
+      "type": "int"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Card",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "ExpectedLayer",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "StartUtc",
+      "type": "datetime"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "EndUtc",
+      "type": "datetime"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Fingerprint",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Result",
+      "type": "string"
+    },
+    {
+      "isDefaultDisplay": false,
+      "isHidden": false,
+      "name": "Note",
+      "type": "string"
+    }
+  ]
+}

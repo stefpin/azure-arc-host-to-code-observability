@@ -1,0 +1,350 @@
+// =====================================================================================================
+// MiniBank query library (KQL). Run in the Azure Portal: law-appmon > Logs (or appi-minibank > Logs).
+// Tables: AppRequests, AppDependencies, AppExceptions, AppAvailabilityResults, AppPageViews, AppTraces (Application
+// Insights), KubeNodeInventory, KubePodInventory, ContainerLogV2 (Container Insights), MiniBankDbSnap_CL (Route A),
+// W3CIISLog (IIS logs from APP-WIN), Usage. Select ONE query (from its // line to the next) and click Run.
+// Cloud role names: minibank-web, minibank-api, minibank-transfer, minibank-fraud (+ minibank-probe for availability).
+// Version 1.3 definitions: technical failure = server error, toint(ResultCode) >= 500 (all fail-* scenarios and real faults);
+// business decline = ResultCode "409" (Insufficient balance, a correct answer of the bank). Application Insights marks every
+// 4xx as Success == false, so SLA and failure queries use the result code. The SLA counts only technical failures.
+// Version 1.4 (P1) adds section E: request tags of minibank-api in AppRequests.Properties (strings, so use todouble()/
+// tostring()): minibank.trafficSource (people, robot, traffic, probe, unknown), minibank.userId, minibank.tier, minibank.channel,
+// minibank.amountIdr, minibank.amountBand, minibank.outcome; browser items carry Properties.trafficSource; customer journeys
+// are AppEvents named "minibank.journey".
+// =====================================================================================================
+
+// ---------- A. Applications --------------------------------------------------------------------------
+
+// A1 Requests, dependency calls, technical failure rate (5xx) and business declines (409) per service (last hour)
+let req = AppRequests | where TimeGenerated > ago(1h) and AppRoleName startswith "minibank-"
+| summarize Requests = sum(ItemCount), FailedRequests = sumif(ItemCount, toint(ResultCode) >= 500), Declines = sumif(ItemCount, ResultCode == "409"),
+            P95Ms = round(percentile(DurationMs, 95), 0) by AppRoleName;
+let dep = AppDependencies | where TimeGenerated > ago(1h) and AppRoleName startswith "minibank-"
+| summarize Dependencies = sum(ItemCount), FailedDependencies = sumif(ItemCount, Success == false) by AppRoleName;
+req | join kind=leftouter dep on AppRoleName
+| project AppRoleName, Requests, FailedRequests, FailureRatePct = round(100.0 * FailedRequests / Requests, 2), Declines, P95Ms, Dependencies, FailedDependencies
+| order by AppRoleName asc
+
+// A2 SLA summary for business transactions (target 99.9 % without a technical failure and P95 <= 1000 ms, last 24 hours)
+let target = 99.9;
+AppRequests
+| where TimeGenerated > ago(24h) and AppRoleName == "minibank-api" and Name !has "health" and Name has "/api/"
+| summarize Total = sum(ItemCount), Failed = sumif(ItemCount, toint(ResultCode) >= 500), Declines = sumif(ItemCount, ResultCode == "409"),
+            P95Ms = round(percentile(DurationMs, 95), 0)
+| extend SuccessPct = round(100.0 * (Total - Failed) / Total, 3)
+| extend ErrorBudgetUsedPct = round(100.0 * (100.0 - SuccessPct) / (100.0 - target), 1)
+| extend SlaMet = SuccessPct >= target and P95Ms <= 1000
+
+// A3 P95 latency, technical failure rate (5xx) and business declines (409) per business transaction (Transfer, QRIS, Statement, Login)
+AppRequests
+| where TimeGenerated > ago(24h) and AppRoleName == "minibank-api"
+| extend Transaction = case(Name endswith "/api/transfer", "Transfer", Name endswith "/api/qris/pay", "QRIS",
+                            Name endswith "/statement", "Statement", Name endswith "/api/login", "Login", "")
+| where Transaction != ""
+| summarize Requests = sum(ItemCount), TechnicalFailedPct = round(100.0 * sumif(ItemCount, toint(ResultCode) >= 500) / sum(ItemCount), 2),
+            Declines = sumif(ItemCount, ResultCode == "409"),
+            P50Ms = round(percentile(DurationMs, 50), 0), P95Ms = round(percentile(DurationMs, 95), 0) by Transaction
+| order by Transaction asc
+
+// A4 P95 by operation (all services)
+AppRequests
+| where TimeGenerated > ago(1h) and AppRoleName startswith "minibank-" and Name !has "health"
+| summarize Count = sum(ItemCount), P50 = percentile(DurationMs, 50), P95 = percentile(DurationMs, 95), P99 = percentile(DurationMs, 99) by AppRoleName, Name
+| order by P95 desc
+
+// A5 Technical failure rate (5xx) per service, 5-minute bins (time chart)
+AppRequests
+| where TimeGenerated > ago(6h) and AppRoleName startswith "minibank-" and Name !has "health"
+| summarize Total = sum(ItemCount), Failed = sumif(ItemCount, toint(ResultCode) >= 500) by AppRoleName, bin(TimeGenerated, 5m)
+| extend FailureRatePct = round(100.0 * Failed / Total, 2)
+| project TimeGenerated, AppRoleName, FailureRatePct
+| render timechart
+
+// A6 Technical failures by cloud role (failed requests 5xx and exceptions, last hour)
+union
+  (AppRequests | where TimeGenerated > ago(1h) and toint(ResultCode) >= 500 | summarize Count = sum(ItemCount) by AppRoleName, Kind = "Failed requests (5xx)"),
+  (AppExceptions | where TimeGenerated > ago(1h) | summarize Count = sum(ItemCount) by AppRoleName, Kind = "Exceptions")
+| where AppRoleName startswith "minibank-"
+| order by AppRoleName asc, Kind asc
+
+// A7 Top failed dependencies (failure points)
+AppDependencies
+| where TimeGenerated > ago(1h) and Success == false and AppRoleName startswith "minibank-"
+| summarize Failed = sum(ItemCount) by AppRoleName, DependencyType, Target, Name, ResultCode
+| top 10 by Failed desc
+
+// A8 Top exceptions (fail-api, fail-java, fail-python, ORA-00942)
+AppExceptions
+| where TimeGenerated > ago(1h) and AppRoleName startswith "minibank-"
+| summarize Count = sum(ItemCount) by AppRoleName, ExceptionType, OuterMessage
+| order by Count desc
+
+// A9 One transaction end to end. By default the newest technical failure (5xx); to look at a receipt,
+//    replace the toscalar(...) expression with the Trace ID in quotes, for example "4bf92f3577b34da6a3ce929d0e0e4736".
+let traceId = toscalar(AppRequests | where AppRoleName == "minibank-api" and toint(ResultCode) >= 500 | top 1 by TimeGenerated desc | project OperationId);
+union AppRequests, AppDependencies, AppExceptions, AppPageViews
+| where OperationId == traceId
+| project TimeGenerated, Type, AppRoleName, Name, Target, DurationMs, Success, ResultCode, OuterMessage
+| order by TimeGenerated asc
+
+// A10 Availability from the internal probe (scripts/probe.ps1 on HV-HOST-02)
+AppAvailabilityResults
+| where TimeGenerated > ago(24h)
+| summarize Runs = count(), Passed = countif(Success == true), AvgMs = round(avg(DurationMs), 0) by Name, Location
+| extend AvailabilityPct = round(100.0 * Passed / Runs, 2)
+
+// A11 Browser page views per screen (minibank-web)
+AppPageViews
+| where TimeGenerated > ago(1h) and AppRoleName == "minibank-web"
+| summarize Views = sum(ItemCount), AvgMs = round(avg(DurationMs), 0) by Name, ClientBrowser
+| order by Views desc
+
+// A12 Requests per minute per service (time chart)
+AppRequests
+| where TimeGenerated > ago(1h) and AppRoleName startswith "minibank-"
+| summarize RequestsPerMinute = sum(ItemCount) by AppRoleName, bin(TimeGenerated, 1m)
+| render timechart
+
+// A13 Sampling override: Java health checks are dropped at the source (expect 0 rows with /actuator/health)
+AppRequests
+| where TimeGenerated > ago(3h) and AppRoleName == "minibank-transfer"
+| summarize HealthChecks = countif(Url has "/actuator/health"), BusinessCalls = countif(Url !has "/actuator/health") by bin(TimeGenerated, 10m)
+| render columnchart
+
+// A14 Masking at the source: account numbers in Java telemetry show only the last 4 digits
+union
+  (AppRequests | where TimeGenerated > ago(1h) and AppRoleName == "minibank-transfer" and Url has "/api/ledger/" | project TimeGenerated, Kind = "Url", Value = Url),
+  (AppTraces | where TimeGenerated > ago(1h) and AppRoleName == "minibank-transfer" and isnotempty(Properties["minibank.account"])
+             | project TimeGenerated, Kind = "minibank.account", Value = tostring(Properties["minibank.account"]))
+| take 20
+
+// A15 Alert rule query as a chart: technical failure rate of minibank-api POST requests (5-minute bins).
+//     Alert alr-minibank-failure-rate-high fires when a 5-minute window has at least 5 requests and more than 2 percent.
+AppRequests
+| where AppRoleName == "minibank-api" and Name startswith "POST /api/"
+| summarize Total = sum(ItemCount), Failed = sumif(ItemCount, toint(ResultCode) >= 500) by bin(TimeGenerated, 5m)
+| extend FailureRatePct = 100.0 * Failed / Total
+
+// A16 Business declines (HTTP 409 Insufficient balance) per hour, last 24 hours. Background traffic: about 4 per hour.
+AppRequests
+| where TimeGenerated > ago(24h) and AppRoleName == "minibank-api" and ResultCode == "409"
+| summarize Declines = sum(ItemCount) by bin(TimeGenerated, 1h)
+| render columnchart
+
+// A17 Latest business declines with the trace ID (open one with A9)
+AppRequests
+| where TimeGenerated > ago(24h) and AppRoleName == "minibank-api" and ResultCode == "409"
+| project TimeGenerated, Name, DurationMs, TraceId = OperationId
+| top 20 by TimeGenerated desc
+
+// A18 Alert rule query of alr-minibank-decline-spike (15-minute window): more than 10 declines
+AppRequests
+| where TimeGenerated > ago(15m) and AppRoleName == "minibank-api" and Name startswith "POST /api/" and ResultCode == "409"
+| summarize Declines = count()
+| where Declines > 10
+
+// ---------- B. OpenShift (Container Insights) ----------------------------------------------------------
+
+// B1 Node status (Ready / NotReady) - latest record per node
+KubeNodeInventory
+| where TimeGenerated > ago(15m)
+| summarize arg_max(TimeGenerated, Status, KubeletVersion) by Computer
+| project Node = Computer, Status, KubeletVersion, LastSeen = TimeGenerated
+| order by Node asc
+
+// B2 minibank-transfer pods per node (spread over ocp-node-1..4)
+KubePodInventory
+| where TimeGenerated > ago(15m) and Namespace == "minibank"
+| summarize arg_max(TimeGenerated, PodStatus, Computer) by Name
+| summarize Pods = count(), PodNames = make_set(Name) by Node = Computer, PodStatus
+
+// B3 Pod restarts in project minibank
+KubePodInventory
+| where TimeGenerated > ago(1h) and Namespace == "minibank"
+| summarize arg_max(TimeGenerated, PodStatus, ContainerRestartCount, Computer) by Name
+| project Pod = Name, Node = Computer, PodStatus, Restarts = ContainerRestartCount
+| order by Restarts desc
+
+// B4 minibank-transfer container logs (stdout/stderr)
+ContainerLogV2
+| where TimeGenerated > ago(30m) and PodNamespace == "minibank"
+| project TimeGenerated, PodName, LogSource, LogMessage
+| order by TimeGenerated desc
+| take 100
+
+// B5 Log filtering check: log lines per namespace (excluded openshift-* namespaces must not appear)
+ContainerLogV2
+| where TimeGenerated > ago(1h)
+| summarize Lines = count() by PodNamespace
+| order by Lines desc
+
+// ---------- C. Databases (Route A custom table MiniBankDbSnap_CL) ---------------------------------------
+
+// C1 Latest snapshot per engine, type and name
+MiniBankDbSnap_CL
+| where TimeGenerated > ago(10m)
+| summarize arg_max(TimeGenerated, Value, Detail) by DbEngine, SnapshotType, Name
+| order by DbEngine asc, SnapshotType asc, Value desc
+
+// C2 Oracle waits: seconds waited per event during the last hour (Value is cumulative, so max - min)
+MiniBankDbSnap_CL
+| where TimeGenerated > ago(1h) and DbEngine == "Oracle" and SnapshotType == "waits"
+| summarize SecondsWaited = round(max(Value) - min(Value), 2), Samples = count() by Name
+| order by SecondsWaited desc
+
+// C3 Oracle top SQL: average milliseconds per execution (latest snapshot)
+MiniBankDbSnap_CL
+| where TimeGenerated > ago(10m) and DbEngine == "Oracle" and SnapshotType == "topsql"
+| summarize arg_max(TimeGenerated, Value, Detail) by SqlId = Name
+| project SqlId, AvgMsPerExecution = Value, SqlTextAndExecutions = Detail
+| order by AvgMsPerExecution desc
+
+// C4 PostgreSQL waits: sessions per wait_event_type over time (slow-postgres shows as Timeout)
+MiniBankDbSnap_CL
+| where TimeGenerated > ago(1h) and DbEngine == "PostgreSQL" and SnapshotType == "waits"
+| summarize Sessions = max(Value) by Name, bin(TimeGenerated, 1m)
+| render timechart
+
+// C5 PostgreSQL top SQL: mean_exec_time in milliseconds (latest snapshot)
+MiniBankDbSnap_CL
+| where TimeGenerated > ago(10m) and DbEngine == "PostgreSQL" and SnapshotType == "topsql"
+| summarize arg_max(TimeGenerated, Value, Detail) by QueryId = Name
+| project QueryId, MeanMs = Value, SqlTextAndExecutions = Detail
+| order by MeanMs desc
+
+// C6 Sessions over time for both engines
+MiniBankDbSnap_CL
+| where TimeGenerated > ago(3h) and SnapshotType == "sessions" and Name == "TOTAL"
+| summarize Sessions = max(Value) by DbEngine, bin(TimeGenerated, 5m)
+| render timechart
+
+// C7 Blocked sessions and Oracle alert log errors (ORA- lines per minute)
+MiniBankDbSnap_CL
+| where TimeGenerated > ago(3h) and SnapshotType in ("locks", "errors")
+| summarize Value = max(Value) by Series = strcat(DbEngine, " ", SnapshotType), bin(TimeGenerated, 5m)
+| render timechart
+
+// C8 slow-oracle: seconds slept in 'PL/SQL lock timer' next to slow Oracle calls seen by minibank-transfer
+let sleeps = MiniBankDbSnap_CL
+| where TimeGenerated > ago(3h) and DbEngine == "Oracle" and SnapshotType == "waits" and Name == "PL/SQL lock timer"
+| order by TimeGenerated asc
+| extend Delta = Value - prev(Value)
+| where Delta >= 0
+| summarize SleepSeconds = sum(Delta) by bin(TimeGenerated, 5m);
+let slowCalls = AppDependencies
+| where TimeGenerated > ago(3h) and AppRoleName == "minibank-transfer" and DurationMs > 1500
+| where DependencyType =~ "oracle" or Target has "FREEPDB1" or Target has "1521"
+| summarize SlowOracleCalls = sum(ItemCount) by bin(TimeGenerated, 5m);
+sleeps
+| join kind=fullouter slowCalls on TimeGenerated
+| project TimeGenerated = coalesce(TimeGenerated, TimeGenerated1), SleepSeconds, SlowOracleCalls
+| render timechart
+
+// ---------- D. IIS logs from APP-WIN (DCR with transformation monitoring/dcr/iis-transform.kql) ---------
+
+// D1 IIS hits per URL (no /api/health rows after the transformation)
+W3CIISLog
+| where TimeGenerated > ago(3h) and Computer startswith "APP-WIN"
+| summarize Hits = count() by csUriStem
+| order by Hits desc
+
+// D2 Health-check lines stored (expect 0: they are dropped at ingestion)
+W3CIISLog
+| where TimeGenerated > ago(3h) and csUriStem =~ "/api/health"
+| count
+
+// D3 IIS status codes per 5 minutes
+W3CIISLog
+| where TimeGenerated > ago(3h) and Computer startswith "APP-WIN"
+| summarize Hits = count() by Status = tostring(scStatus), bin(TimeGenerated, 5m)
+| render columnchart
+
+// D4 Data volume per table, last 24 hours (MB)
+Usage
+| where TimeGenerated > ago(24h)
+| where DataType startswith "App" or DataType in ("W3CIISLog", "MiniBankDbSnap_CL", "ContainerLogV2", "KubePodInventory", "KubeNodeInventory")
+| summarize MB = round(sum(Quantity), 2) by DataType
+| order by MB desc
+
+// ---------- E. Business impact (IDR) and customer journeys (v1.4) -------------------------------------
+
+// E1 Traffic sources on minibank-api (last hour). "unknown" = no or an invalid X-MiniBank-Source header: should stay about 0
+AppRequests
+| where TimeGenerated > ago(1h) and AppRoleName == "minibank-api" and Name has "/api/"
+| summarize Requests = sum(ItemCount), TechnicalFailures = sumif(ItemCount, toint(ResultCode) >= 500)
+            by TrafficSource = tostring(Properties["minibank.trafficSource"])
+| order by Requests desc
+
+// E2 Failed payment value in IDR (technical failures 5xx of Transfer and QRIS), last 10 minutes and last hour
+AppRequests
+| where TimeGenerated > ago(1h) and AppRoleName == "minibank-api" and (Name endswith "/api/transfer" or Name endswith "/api/qris/pay")
+| where toint(ResultCode) >= 500
+| extend AmountIdr = todouble(Properties["minibank.amountIdr"]), UserId = tostring(Properties["minibank.userId"])
+| summarize FailedValueIdr1h = sum(AmountIdr * ItemCount), FailedValueIdr10m = sumif(AmountIdr * ItemCount, TimeGenerated > ago(10m)),
+            FailedPayments1h = sum(ItemCount), CustomersAffected1h = dcountif(UserId, isnotempty(UserId))
+
+// E3 Failed payment value by tier, amount band and traffic source (last hour)
+AppRequests
+| where TimeGenerated > ago(1h) and AppRoleName == "minibank-api" and (Name endswith "/api/transfer" or Name endswith "/api/qris/pay")
+| where toint(ResultCode) >= 500
+| extend AmountIdr = todouble(Properties["minibank.amountIdr"]), UserId = tostring(Properties["minibank.userId"])
+| summarize FailedValueIdr = sum(AmountIdr * ItemCount), FailedPayments = sum(ItemCount), CustomersAffected = dcountif(UserId, isnotempty(UserId))
+            by Tier = tostring(Properties["minibank.tier"]), AmountBand = tostring(Properties["minibank.amountBand"]),
+               TrafficSource = tostring(Properties["minibank.trafficSource"])
+| order by FailedValueIdr desc
+
+// E4 Latest failed payments with User ID, tier, channel, amount and trace ID (open one with A9)
+AppRequests
+| where TimeGenerated > ago(24h) and AppRoleName == "minibank-api" and (Name endswith "/api/transfer" or Name endswith "/api/qris/pay")
+| where toint(ResultCode) >= 500
+| project TimeGenerated, UserId = tostring(Properties["minibank.userId"]), Tier = tostring(Properties["minibank.tier"]),
+          Channel = tostring(Properties["minibank.channel"]), AmountIdr = todouble(Properties["minibank.amountIdr"]),
+          TrafficSource = tostring(Properties["minibank.trafficSource"]), ResultCode, TraceId = OperationId
+| top 20 by TimeGenerated desc
+
+// E5 Alert rule query of alr-minibank-failed-value-idr as a chart: failed payment value per 10 minutes (threshold IDR 100,000,000)
+AppRequests
+| where TimeGenerated > ago(6h) and AppRoleName == "minibank-api" and (Name endswith "/api/transfer" or Name endswith "/api/qris/pay")
+| where toint(ResultCode) >= 500
+| summarize FailedValueIdr = sum(todouble(Properties["minibank.amountIdr"]) * ItemCount) by bin(TimeGenerated, 10m)
+| extend AlertThresholdIdr = 100000000.0
+| render timechart
+
+// E6 Payment outcomes by tier (last hour): success, declined (409), failed (5xx)
+AppRequests
+| where TimeGenerated > ago(1h) and AppRoleName == "minibank-api" and isnotempty(tostring(Properties["minibank.channel"]))
+| summarize Payments = sum(ItemCount), ValueIdr = sum(todouble(Properties["minibank.amountIdr"]) * ItemCount)
+            by Tier = tostring(Properties["minibank.tier"]), Outcome = tostring(Properties["minibank.outcome"])
+| order by Tier asc, Outcome asc
+
+// E7 Customer journeys (browser): success rate per 10 minutes by journey type and traffic source
+AppEvents
+| where TimeGenerated > ago(6h) and Name == "minibank.journey" and tostring(Properties["stage"]) == "end"
+| summarize Journeys = sum(ItemCount), Failed = sumif(ItemCount, tostring(Properties["success"]) != "true")
+            by bin(TimeGenerated, 10m), JourneyType = tostring(Properties["journeyType"]), TrafficSource = tostring(Properties["trafficSource"])
+| extend SuccessPct = round(100.0 * (Journeys - Failed) / Journeys, 1)
+| order by TimeGenerated desc
+
+// E8 Alert rule query of alr-minibank-journey-success-low (10-minute window): success below 90 % and at least 2 failed journeys
+AppEvents
+| where TimeGenerated > ago(10m) and Name == "minibank.journey" and tostring(Properties["stage"]) == "end"
+| summarize Journeys = sum(ItemCount), FailedJourneys = sumif(ItemCount, tostring(Properties["success"]) != "true")
+| where Journeys > 0
+| extend SuccessPct = round(100.0 * (Journeys - FailedJourneys) / Journeys, 1)
+| where SuccessPct < 90 and FailedJourneys >= 2
+
+// E9 Failed journeys with the customer and the API trace ID (open the transaction with A9)
+AppEvents
+| where TimeGenerated > ago(24h) and Name == "minibank.journey" and tostring(Properties["stage"]) == "end"
+      and tostring(Properties["success"]) != "true"
+| project TimeGenerated, UserId = UserAuthenticatedId, JourneyType = tostring(Properties["journeyType"]),
+          FailedStep = tostring(Properties["failedStep"]), AmountIdr = todouble(Properties["amountIdr"]),
+          ErrorCode = tostring(Properties["errorCode"]), TrafficSource = tostring(Properties["trafficSource"]),
+          TraceId = tostring(Properties["traceId"]), JourneyId = tostring(Properties["journeyId"])
+| top 20 by TimeGenerated desc
+
+// E10 Browser users and sessions by traffic source (robot customers vs real persons), last 24 hours
+AppPageViews
+| where TimeGenerated > ago(24h) and AppRoleName == "minibank-web"
+| summarize PageViews = sum(ItemCount), Users = dcount(UserId), AuthenticatedUsers = dcount(UserAuthenticatedId), Sessions = dcount(SessionId)
+            by TrafficSource = tostring(Properties["trafficSource"])

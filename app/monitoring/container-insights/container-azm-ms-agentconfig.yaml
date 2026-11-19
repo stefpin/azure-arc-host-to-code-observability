@@ -1,0 +1,22 @@
+# Container Insights log filtering for ocp-minibank: collect stdout/stderr, but not from the noisy system namespaces.
+# Wildcards are not supported, so every namespace is listed. Apply: oc apply -f monitoring/container-insights/container-azm-ms-agentconfig.yaml
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: container-azm-ms-agentconfig
+  namespace: kube-system
+data:
+  schema-version: v1
+  config-version: ver1
+  log-data-collection-settings: |-
+    [log_collection_settings]
+       [log_collection_settings.stdout]
+          enabled = true
+          exclude_namespaces = ["kube-system","gatekeeper-system","azure-arc","openshift-apiserver","openshift-apiserver-operator","openshift-authentication","openshift-authentication-operator","openshift-catalogd","openshift-cloud-controller-manager","openshift-cloud-controller-manager-operator","openshift-cloud-credential-operator","openshift-cluster-machine-approver","openshift-cluster-node-tuning-operator","openshift-cluster-olm-operator","openshift-cluster-samples-operator","openshift-cluster-storage-operator","openshift-cluster-version","openshift-config-operator","openshift-console","openshift-console-operator","openshift-controller-manager","openshift-controller-manager-operator","openshift-dns","openshift-dns-operator","openshift-etcd","openshift-etcd-operator","openshift-image-registry","openshift-ingress","openshift-ingress-canary","openshift-ingress-operator","openshift-insights","openshift-kni-infra","openshift-kube-apiserver","openshift-kube-apiserver-operator","openshift-kube-controller-manager","openshift-kube-controller-manager-operator","openshift-kube-scheduler","openshift-kube-scheduler-operator","openshift-kube-storage-version-migrator","openshift-kube-storage-version-migrator-operator","openshift-machine-api","openshift-machine-config-operator","openshift-marketplace","openshift-monitoring","openshift-multus","openshift-network-console","openshift-network-diagnostics","openshift-network-node-identity","openshift-network-operator","openshift-oauth-apiserver","openshift-operator-controller","openshift-operator-lifecycle-manager","openshift-operators","openshift-ovn-kubernetes","openshift-route-controller-manager","openshift-service-ca","openshift-service-ca-operator","openshift-user-workload-monitoring"]
+       [log_collection_settings.stderr]
+          enabled = true
+          exclude_namespaces = ["kube-system","gatekeeper-system","azure-arc","openshift-apiserver","openshift-apiserver-operator","openshift-authentication","openshift-authentication-operator","openshift-catalogd","openshift-cloud-controller-manager","openshift-cloud-controller-manager-operator","openshift-cloud-credential-operator","openshift-cluster-machine-approver","openshift-cluster-node-tuning-operator","openshift-cluster-olm-operator","openshift-cluster-samples-operator","openshift-cluster-storage-operator","openshift-cluster-version","openshift-config-operator","openshift-console","openshift-console-operator","openshift-controller-manager","openshift-controller-manager-operator","openshift-dns","openshift-dns-operator","openshift-etcd","openshift-etcd-operator","openshift-image-registry","openshift-ingress","openshift-ingress-canary","openshift-ingress-operator","openshift-insights","openshift-kni-infra","openshift-kube-apiserver","openshift-kube-apiserver-operator","openshift-kube-controller-manager","openshift-kube-controller-manager-operator","openshift-kube-scheduler","openshift-kube-scheduler-operator","openshift-kube-storage-version-migrator","openshift-kube-storage-version-migrator-operator","openshift-machine-api","openshift-machine-config-operator","openshift-marketplace","openshift-monitoring","openshift-multus","openshift-network-console","openshift-network-diagnostics","openshift-network-node-identity","openshift-network-operator","openshift-oauth-apiserver","openshift-operator-controller","openshift-operator-lifecycle-manager","openshift-operators","openshift-ovn-kubernetes","openshift-route-controller-manager","openshift-service-ca","openshift-service-ca-operator","openshift-user-workload-monitoring"]
+       [log_collection_settings.env_var]
+          enabled = false
+       [log_collection_settings.schema]
+          containerlog_schema_version = "v2"

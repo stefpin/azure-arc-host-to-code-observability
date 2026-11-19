@@ -1,0 +1,10 @@
+# /etc/systemd/system/minibank-dbsnap.service  (APP-RHEL) - started every 60 s by minibank-dbsnap.timer
+[Unit]
+Description=MiniBank database snapshot (Route A): Oracle + PostgreSQL -> /var/log/minibank/dbsnap.json
+After=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/opt/minibank/dbsnap/minibank-dbsnap.sh
+TimeoutStartSec=90
